@@ -98,7 +98,7 @@ const ProductList: React.FC<ProductListProps> = ({ products, onAddToCart }) => {
               <div className="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-lg">
                 <div>
                   <p className="text-xs text-gray-500">سعر الوحدة</p>
-                  <p className="text-xl font-black text-blue-700">{product.price.toLocaleString()} ر.س</p>
+                  <p className="text-xl font-black text-blue-700">{product.price.toLocaleString()} ج.م</p>
                 </div>
                 <div className="text-left">
                   <p className="text-xs text-gray-500 text-right">أقل كمية</p>

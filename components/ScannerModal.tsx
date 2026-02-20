@@ -76,7 +76,7 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ onScan, onCapture, onClose 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col font-['Tajawal']" dir="rtl">
+    <div className="fixed inset-0 z-100 bg-black flex flex-col font-['Tajawal']" dir="rtl">
       <div className="relative flex-1 flex items-center justify-center overflow-hidden">
         {error ? (
           <div className="p-10 text-center space-y-4">

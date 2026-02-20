@@ -16,19 +16,10 @@ root.render(
   </React.StrictMode>
 );
 
-// في ملف التسجيل الرئيسي للتطبيق
 if ('serviceWorker' in navigator) {
-  // لا تقم بتسجيل SW في بيئة التطوير
-  if (process.env.NODE_ENV === 'production') {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch((error) => {
-        console.log('ServiceWorker registration failed: ', error);
-      });
-    });
-  } else {
-    // في التطوير، تأكد من إلغاء أي SW مسجل مسبقاً
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
-      registrations.forEach((registration) => registration.unregister());
-    });
-  }
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('SW registered!', reg))
+      .catch(err => console.log('SW error:', err));
+  });
 }

@@ -51,7 +51,7 @@ const ESB2BChat: React.FC<ESB2BChatProps> = ({ isOpen, onClose, products }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/40 flex items-end md:items-center justify-center p-0 md:p-4">
+    <div className="fixed inset-0 z-100 bg-black/40 flex items-end md:items-center justify-center p-0 md:p-4">
       <div className="bg-white w-full max-w-lg h-[80vh] md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
         <div className="bg-[#feee00] p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">

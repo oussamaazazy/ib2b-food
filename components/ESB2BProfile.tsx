@@ -6,7 +6,7 @@ interface ESB2BProfileProps {
   userRole: string;
   currentUser: AppUser | null;
   onLogout: () => void;
-  onNavigate: (tab: string, subTab?: 'cart' | 'tracking') => void;
+  onNavigate: (tab: string, subTab?: any) => void; // تم تعديل النوع لقبول بارامترات مرنة
   lang?: 'ar' | 'en';
 }
 
@@ -78,15 +78,14 @@ const ESB2BProfile: React.FC<ESB2BProfileProps> = ({ userRole, currentUser, onLo
       title: labels.support,
       items: [
         { id: 'settings', label: labels.security, icon: '⚙️', color: 'bg-slate-100 text-slate-600' },
-{ 
-  id: 'help', 
-  label: labels.help, 
-  icon: '🎧', 
-  color: 'bg-purple-50 text-purple-600', 
-  isExternal: true, 
-  // استخدام الرابط العالمي المختصر wa.me فهو يبحث تلقائياً عن التطبيق المتاح (أعمال أو شخصي)
-  url: `https://wa.me/${SUPPLIER_PHONE.replace(/\D/g, '')}?text=${encodeURIComponent('مرحباً، أحتاج مساعدة في منصة ib2b')}` 
-},
+        { 
+          id: 'help', 
+          label: labels.help, 
+          icon: '🎧', 
+          color: 'bg-purple-50 text-purple-600', 
+          isExternal: true, 
+          url: `https://wa.me/${SUPPLIER_PHONE.replace(/\D/g, '')}?text=${encodeURIComponent('مرحباً، أحتاج مساعدة في منصة ib2b')}` 
+        },
       ]
     }
   ];
@@ -123,9 +122,10 @@ const ESB2BProfile: React.FC<ESB2BProfileProps> = ({ userRole, currentUser, onLo
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: labels.myOrders, value: '📊', id: 'cart', subId: 'tracking' },
-            { label: labels.favorites, value: '❤️', id: 'home' }, // العودة للرئيسية للمفضلة
-            { label: labels.invoices, value: '🧾', id: 'docs' }, // توجيه لقسم المستندات
-            { label: labels.notifs, value: '🔔', id: 'settings' }, // توجيه للإعدادات/التنبيهات
+            // تم تعديل زر المفضلة ليرسل كلمة "المفضلة" كـ Sub-Tab ليتم معالجتها في الهوم
+            { label: labels.favorites, value: '❤️', id: 'home', subId: 'المفضلة' }, 
+            { label: labels.invoices, value: '🧾', id: 'docs' },
+            { label: labels.notifs, value: '🔔', id: 'settings' },
           ].map((stat, i) => (
             <button 
               key={i} 

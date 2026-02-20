@@ -65,7 +65,7 @@ const ESB2BAdmin: React.FC<ESB2BAdminProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-fadeIn">
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-100">
               <p className="text-xs text-gray-400 font-bold">إجمالي المبيعات</p>
-              <h2 className="text-2xl font-black text-emerald-600">{formatEnNumber(stats.totalSales)} ر.س</h2>
+              <h2 className="text-2xl font-black text-emerald-600">{formatEnNumber(stats.totalSales)} ج.م</h2>
             </div>
             {/* أضف باقي الكروت هنا بنفس النمط */}
           </div>
@@ -89,7 +89,7 @@ const ESB2BAdmin: React.FC<ESB2BAdminProps> = ({
                   <tr key={p.id} className="hover:bg-gray-50">
                     <td className="p-4 font-bold">{p.name}</td>
                     <td className="p-4 text-gray-500">{p.supplier}</td>
-                    <td className="p-4 text-emerald-600 font-black">{p.price} ر.س</td>
+                    <td className="p-4 text-emerald-600 font-black">{p.price} ج.م</td>
                     <td className="p-4">
                       <input 
                         type="number" 
@@ -165,7 +165,7 @@ const ESB2BAdmin: React.FC<ESB2BAdminProps> = ({
                           <option value="cancelled">ملغي</option>
                         </select>
                       </td>
-                      <td className="p-4 font-black">{formatEnNumber(o.total)} ر.س</td>
+                      <td className="p-4 font-black">{formatEnNumber(o.total)} ج.م</td>
                     </tr>
                   ))}
                 </tbody>

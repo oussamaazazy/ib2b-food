@@ -40,7 +40,7 @@ const Orders: React.FC<OrdersProps> = ({ cart, removeFromCart, updateQuantity })
               <div className="flex-1">
                 <h3 className="font-bold text-gray-900">{item.name}</h3>
                 <p className="text-xs text-gray-500">{item.supplier}</p>
-                <p className="text-blue-600 font-bold mt-1">{item.price.toLocaleString()} ر.س / وحدة</p>
+                <p className="text-blue-600 font-bold mt-1">{item.price.toLocaleString()} ج.م / وحدة</p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center border rounded-lg">
@@ -83,7 +83,7 @@ const Orders: React.FC<OrdersProps> = ({ cart, removeFromCart, updateQuantity })
             </div>
             <div className="pt-4 border-t flex justify-between items-center">
               <span className="font-bold">الإجمالي المبدئي</span>
-              <span className="text-2xl font-black text-blue-700">{total.toLocaleString()} ر.س</span>
+              <span className="text-2xl font-black text-blue-700">{total.toLocaleString()} ج.م</span>
             </div>
           </div>
           <button className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">

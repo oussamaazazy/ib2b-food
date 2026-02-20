@@ -1,85 +1,59 @@
-const CACHE_NAME = 'esb2b-v2';
+const CACHE_NAME = 'b2b-hub-v1';
 const ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/favicon.ico',
-  '/logo192.png',
-  '/logo512.png'
+  '/logo.png', // تأكد من وجود هذا الملف أو احذفه من المصفوفة
 ];
 
-// تثبيت الأصول الأساسية
+// Install event
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
-  );
-});
-
-// تفعيل وحذف الكاش القديم
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
+      // استخدام cache.addAll أسهل ولكن سنبقي على منطقك لتجنب انهيار التثبيت بسبب ملف واحد
       return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
+        ASSETS.map((url) =>
+          fetch(url)
+            .then((res) => {
+              if (res.ok) return cache.put(url, res);
+            })
+            .catch((err) => console.warn('Skipping cache for:', url))
+        )
       );
     })
   );
 });
 
-// إصلاح fetch event
+// Fetch event - الجزء الذي يحتاج إصلاح
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  
-  // تجاهل تماماً جميع الطلبات الخارجية (Google Script, Firebase, etc.)
-  if (url.origin !== self.location.origin) {
-    // تجاهل طلبات Google Apps Script
-    if (url.href.includes('script.google.com')) {
-      return; // دع المتصفح يتعامل معها مباشرة
-    }
-    // تجاهل طلبات Firebase
-    if (url.href.includes('firebase') || url.href.includes('googleapis')) {
-      return;
-    }
-    // تجاهل Vite/HMR
-    if (url.href.includes('@vite') || url.href.includes('node_modules')) {
-      return;
-    }
-  }
-  
-  // فقط اعترض الطلبات المحلية
+  // 1. تجاهل الطلبات التي ليست HTTP أو HTTPS (مثل إضافات المتصفح)
+  if (!(event.request.url.indexOf('http') === 0)) return;
+
   event.respondWith(
-    (async () => {
-      try {
-        // حاول أولاً من الكاش
-        const cachedResponse = await caches.match(event.request);
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        
-        // إذا لم يوجد، اجلب من الشبكة
-        const networkResponse = await fetch(event.request);
-        
-        // فقط خزن استجابات ناجحة للمحتوى الثابت
-        if (networkResponse.status === 200 && event.request.destination) {
-          const cache = await caches.open(CACHE_NAME);
-          await cache.put(event.request, networkResponse.clone());
-        }
-        
-        return networkResponse;
-      } catch (error) {
-        // فقط لطلبات الصفحات، ارجع صفحة الـ offline
-        if (event.request.destination === 'document') {
-          const cached = await caches.match('/index.html');
-          if (cached) return cached;
-        }
-        throw error;
+    caches.match(event.request).then((cachedResponse) => {
+      // إذا وجدنا الملف في الكاش، نرجعه
+      if (cachedResponse) {
+        return cachedResponse;
       }
-    })()
+
+      // إذا لم نجده، نحاول جلبة من الشبكة
+      return fetch(event.request)
+        .then((networkResponse) => {
+          // تأكد أن الاستجابة صالحة قبل محاولة استخدامها
+          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+            return networkResponse;
+          }
+          return networkResponse;
+        })
+        .catch((err) => {
+          // هنا يحدث الـ "Failed to fetch" عند انقطاع الشبكة
+          console.error('Fetch failed:', err);
+          
+          if (event.request.destination === 'document') {
+            return caches.match('/index.html');
+          }
+        });
+    })
   );
 });

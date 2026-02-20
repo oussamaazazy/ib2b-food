@@ -20,9 +20,9 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const stats = [
-    { label: 'إجمالي المبيعات (الشهر)', value: '67,000 ر.س', change: '+12%', color: 'text-green-600', icon: '💰' },
+    { label: 'إجمالي المبيعات (الشهر)', value: '67,000 ج.م', change: '+12%', color: 'text-green-600', icon: '💰' },
     { label: 'الطلبات النشطة', value: '18', change: '5 قيد الشحن', color: 'text-blue-600', icon: '📦' },
-    { label: 'متوسط قيمة الطلب', value: '3,720 ر.س', change: '+5%', color: 'text-purple-600', icon: '💳' },
+    { label: 'متوسط قيمة الطلب', value: '3,720 ج.م', change: '+5%', color: 'text-purple-600', icon: '💳' },
     { label: 'الموردون المعتمدون', value: '42', change: '3 جدد', color: 'text-orange-600', icon: '🤝' },
   ];
 
@@ -137,7 +137,7 @@ const Dashboard: React.FC = () => {
                 <td className="px-6 py-4 font-bold text-blue-600">#ORD-902{i}</td>
                 <td className="px-6 py-4 font-medium">شركة المنهل للتجارة</td>
                 <td className="px-6 py-4 text-gray-500">منذ 3 ساعات</td>
-                <td className="px-6 py-4 font-bold">12,450 ر.س</td>
+                <td className="px-6 py-4 font-bold">12,450 ج.م</td>
                 <td className="px-6 py-4">
                   <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                     i % 2 === 0 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'

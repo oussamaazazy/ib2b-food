@@ -9,7 +9,6 @@ import { formatEnNumber, formatDate } from '../App';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MOCK_STATS, CUSTOMER_PHONE } from '../constants';
 // import ScannerModal from './ScannerModal';
-
 interface ESB2BSellerProps {
   products: Product[];
   orders: Order[];
@@ -30,6 +29,7 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
   products = [], orders = [], users = [], notifications = [], currentUser, 
   onUpdateProduct, onAddProduct, onUpdateOrderStatus, onAddUser, onUpdateUser, onDeleteUser, onLogout, lang = 'ar' 
 }) => {
+  // تحديث أنواع التبويبات لإضافة 'offers'
   const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'orders' | 'customers' | 'offers'>('overview');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -45,16 +45,14 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
 
   const initialProductForm: Omit<Product, 'id'> = {
-    name: '', category: '', price: 0, stock: 0, description: '', supplier: currentUser?.company || '',
-    imageUrl: '', isActive: true, barcode: '', expiryDate: '', 
-    offer: { buyQty: 0, getQty: 0, type: 'buy_x_get_y' }, discount: 0,
+    name: '', category: '', price: 0, stock: 0, description: '', supplier: currentUser?.company ||
+    '', imageUrl: '', isActive: true, barcode: '', expiryDate: '', offer: { buyQty: 0, getQty: 0, type: 'buy_x_get_y' }, discount: 0,
   };
-
+  const [selectedCustomerForOrders, setSelectedCustomerForOrders] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<any>(initialProductForm);
 
   const initialUserForm: Omit<AppUser, 'id'> = {
-    company: '', displayName: '', phone: '', email: '', username: '', password: '', 
-    role: 'buyer', status: 'active', logoUrl: ''
+    company: '', displayName: '', phone: '', email: '', username: '', password: '', role: 'buyer', status: 'active', logoUrl: ''
   };
   const [userFormData, setUserFormData] = useState(initialUserForm);
 
@@ -66,40 +64,11 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
   const [imageChangeId, setImageChangeId] = useState<string | null>(null);
   const [activeBrandEditCat, setActiveBrandEditCat] = useState<string | null>(null);
 
-  // تحسين الإحصائيات مع ألوان متسقة
   const stats = [
-    { 
-      label: 'إجمالي المبيعات', 
-      value: orders.reduce((acc, o) => acc + (o.total || 0), 0), 
-      unit: 'ر.س', 
-      icon: '💰', 
-      color: 'bg-gradient-to-br from-blue-500 to-blue-600',
-      textColor: 'text-blue-100'
-    },
-    { 
-      label: 'طلبات جديدة', 
-      value: orders.filter(o => o.status === 'pending').length, 
-      unit: 'طلب', 
-      icon: '🔔', 
-      color: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
-      textColor: 'text-emerald-100'
-    },
-    { 
-      label: 'العملاء النشطين', 
-      value: (users || []).filter(u => u.role === 'buyer').length, 
-      unit: 'عميل', 
-      icon: '👥', 
-      color: 'bg-gradient-to-br from-indigo-500 to-indigo-600',
-      textColor: 'text-indigo-100'
-    },
-    { 
-      label: 'الأصناف المتاحة', 
-      value: products.length, 
-      unit: 'صنف', 
-      icon: '📦', 
-      color: 'bg-gradient-to-br from-slate-700 to-slate-800',
-      textColor: 'text-slate-100'
-    },
+    { label: 'إجمالي المبيعات', value: orders.reduce((acc, o) => acc + (o.total || 0), 0), unit: 'ج.م', icon: '💰', color: 'bg-blue-600' },
+    { label: 'طلبات جديدة', value: orders.filter(o => o.status === 'pending').length, unit: 'طلب', icon: '🔔', color: 'bg-emerald-500' },
+    { label: 'العملاء', value: (users || []).filter(u => u.role === 'buyer').length, unit: 'عميل', icon: '👥', color: 'bg-indigo-600' },
+    { label: 'الأصناف', value: products.length, unit: 'صنف', icon: '📦', color: 'bg-slate-800' },
   ];
 
   const categoriesGrid = useMemo(() => {
@@ -208,19 +177,70 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
   };
 
   const filteredProducts = useMemo(() => {
-    let result = [...products]
-      .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    if (activeTab === 'offers') {
-      result = result.filter(p => (p.discount && p.discount > 0) || (p.offer && p.offer.buyQty > 0));
-    }
-
-    return result.sort((a, b) => {
-      const orderA = a.sortOrder ?? 9999;
-      const orderB = b.sortOrder ?? 9999;
-      return orderA - orderB;
+  let result = [...products];
+  
+  // 🔍 البحث المتقدم: إذا كان هناك نص بحث
+  if (searchQuery.trim() !== '') {
+    const query = searchQuery.toLowerCase().trim();
+    
+    // تقسيم كلمات البحث إذا كان هناك مسافات
+    const searchTerms = query.split(' ').filter(term => term.length > 0);
+    
+    result = result.filter(p => {
+      // البحث في الاسم (الكود الأصلي)
+      if (p.name.toLowerCase().includes(query)) return true;
+      
+      // 🔍 البحث الإضافي في الحقول الأخرى
+      
+      // البحث في الباركود
+      if (p.barcode?.toLowerCase().includes(query)) return true;
+      
+      // البحث في الفئة
+      if (p.category?.toLowerCase().includes(query)) return true;
+      
+      // البحث في الوصف
+      if (p.description?.toLowerCase().includes(query)) return true;
+      
+      // البحث في السعر (كرقم)
+      if (p.price?.toString().includes(query)) return true;
+      
+      // البحث في المورد
+      if (p.supplier?.toLowerCase().includes(query)) return true;
+      
+      // البحث المتقدم: تطابق جميع مصطلحات البحث
+      let matchesAllTerms = true;
+      const productText = `
+        ${p.name || ''}
+        ${p.barcode || ''}
+        ${p.category || ''}
+        ${p.description || ''}
+        ${p.supplier || ''}
+        ${p.price || ''}
+      `.toLowerCase();
+      
+      for (const term of searchTerms) {
+        if (!productText.includes(term)) {
+          matchesAllTerms = false;
+          break;
+        }
+      }
+      
+      return matchesAllTerms;
     });
-  }, [products, searchQuery, activeTab]);
+  }
+  
+  // 🎁 إذا كنا في تبويب العروض، نظهر فقط المنتجات التي بها خصم أو عرض كمية
+  if (activeTab === 'offers') {
+    result = result.filter(p => (p.discount && p.discount > 0) || (p.offer && p.offer.buyQty > 0));
+  }
+
+  // 🔄 الترتيب حسب sortOrder (الكود الأصلي)
+  return result.sort((a, b) => {
+    const orderA = a.sortOrder ?? 9999;
+    const orderB = b.sortOrder ?? 9999;
+    return orderA - orderB;
+  });
+}, [products, searchQuery, activeTab]);
 
   const filteredCustomers = useMemo(() => {
     return (users || []).filter(u => 
@@ -257,31 +277,40 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
   };
 
   const sendOrderInvoiceWhatsApp = (order: Order, waPhone: string) => {
-    const shortId = order.id.substring(0, 8);
-    let message = `*🧾 فاتورة طلب توريد - ES B2B*\n`;
-    message += `-----------------------------------\n`;
-    message += `*🏢 المورد:* ${currentUser?.company || 'مورد معتمد'}\n`;
-    message += `*👤 العميل:* ${order.customerName}\n`;
-    message += `*🔢 رقم الطلب:* #${shortId}\n`;
-    message += `*📅 التاريخ:* ${formatDate(order.date)}\n`;
-    message += `-----------------------------------\n\n`;
-    message += `*📦 الأصناف المطلوبة:*\n`;
-    
-    order.items.forEach((item, index) => {
-      const itemTotal = item.price * item.quantity;
-      message += `${index + 1}. *${item.productName}*\n`;
-      message += `   السعر: ${formatEnNumber(item.price)} ر.س | الكمية: ${item.quantity}\n`;
-      message += `   المجموع: ${formatEnNumber(itemTotal)} ر.س\n`;
-    });
-    
-    message += `\n-----------------------------------\n`;
-    message += `*💰 الإجمالي النهائي: ${formatEnNumber(order.total)} ر.س*\n`;
-    message += `-----------------------------------\n\n`;
-    message += `شكراً لتعاملكم معنا. سيتم إبلاغكم فور تحديث حالة الشحن. ✨`;
+  const shortId = order.id.substring(0, 8);
+  let message = `*🧾 فاتورة طلب توريد - iB2BFOOD*\n`;
+  message += `-----------------------------------\n`;
+  message += `*🏢 المورد:* ${currentUser?.company || 'iB2B'}\n`;
+  message += `*👤 العميل:* ${order.customerName}\n`;
+  message += `*🔢 رقم الطلب:* #${shortId}\n`;
+  message += `*📅 التاريخ:* ${formatDate(order.date)}\n`;
+  message += `-----------------------------------\n\n`;
+  message += `*📦 الأصناف المطلوبة:*\n`;
+  
+  order.items.forEach((item, index) => {
+    // التأكد من جلب اسم المنتج من أي خاصية متوفرة (productName أو name)
+    const name = item.productName || (item as any).name || 'منتج غير مسمى';
+    // التأكد من جلب الباركود
+    const barcode = item.barcode || (item as any).sku || '---';
+    const itemTotal = item.price * item.quantity;
 
-    const whatsappUrl = `https://wa.me/${waPhone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  };
+    message += `${index + 1}. *${name}*\n`;
+    message += `   الباركود: ${barcode}\n`;
+    message += `   الكمية: ${item.quantity}\n`; // الكمية في سطر
+    message += `   السعر: ${formatEnNumber(item.price)} ج.م\n`; // السعر في سطر
+    message += `   المجموع: ${formatEnNumber(itemTotal)} ج.م\n\n`; // سطر فارغ بين المنتجات للتنظيم
+  });
+  
+  message += `-----------------------------------\n`;
+  message += `*💰 الإجمالي النهائي: ${formatEnNumber(order.total)} ج.م*\n`;
+  message += `-----------------------------------\n\n`;
+  message += `شكراً لتعاملكم معنا. سيتم إبلاغكم فور تحديث حالة الشحن. ✨`;
+
+  // تنظيف رقم الهاتف وإرسال الرسالة
+  const cleanPhone = waPhone.replace(/\D/g, '');
+  const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+  window.open(whatsappUrl, '_blank');
+};
 
   const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -324,43 +353,51 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
             }
           }
 
-          const productData = {
-            name: item.name || '',
-            barcode: barcode,
-            price: Number(item.price || 0),
-            discount: Number(item.discount || 0), 
-            offer: {
-              buyQty: Number(item.buyQty || 0),
-              getQty: Number(item.getQty || 0),
-              type: 'buy_x_get_y'
-            },
-            category: item.category || 'عام',
-            stock: Number(item.stock || 0),
-            expiryDate: finalExpiryDate,
-            sortOrder: Number(item.sortOrder || 0),
-            isActive: true,
-            description: item.description || '',
-            imageUrl: item.imageUrl || '',
-            supplier: currentUser?.company || currentUser?.displayName,
-            updatedAt: new Date().toISOString()
-          };
+          // 1. نبحث أولاً عن المنتج في القائمة الحالية باستخدام الباركود
+const existingProduct = products.find(p => String(p.barcode).trim() === barcode && barcode !== "");
 
-          const existingProduct = products.find(p => String(p.barcode).trim() === barcode && barcode !== "");
+const productData = {
+  name: item.name || '',
+  barcode: barcode,
+  price: Number(item.price || 0),
+  discount: Number(item.discount || 0), 
+  offer: {
+    buyQty: Number(item.buyQty || 0),
+    getQty: Number(item.getQty || 0),
+    type: 'buy_x_get_y'
+  },
+  category: item.category || 'عام',
+  stock: Number(item.stock || 0),
+  expiryDate: finalExpiryDate,
+  sortOrder: Number(item.sortOrder || 0),
+  isActive: true,
+  description: item.description || '',
+  
+  // التعديل هنا: 
+  // إذا كان ملف الإكسل يحتوي على رابط (item.imageUrl) نستخدمه، 
+  // وإلا إذا كان المنتج موجوداً نستخدم صورته القديمة (existingProduct.imageUrl)،
+  // وإذا كان منتجاً جديداً تماماً نضع نصاً فارغاً.
+  imageUrl: item.imageUrl || (existingProduct ? existingProduct.imageUrl : ''),
+  
+  supplier: currentUser?.company || currentUser?.displayName,
+  updatedAt: new Date().toISOString()
+};
 
-          if (existingProduct) {
-            await onUpdateProduct(existingProduct.id, productData);
-            updatedCount++;
-          } else {
-            await onAddProduct({
-              ...productData,
-              createdAt: new Date().toISOString()
-            });
-            addedCount++;
-          }
+// 2. التنفيذ بناءً على النتيجة السابقة
+if (existingProduct) {
+  await onUpdateProduct(existingProduct.id, productData);
+  updatedCount++;
+} else {
+  await onAddProduct({
+    ...productData,
+    createdAt: new Date().toISOString()
+  });
+  addedCount++;
+}
         }
         
-        alert(`✅ اكتمل الرفع بنجاح!\n- تم تحديث: ${updatedCount} منتج\n- تم إضافة: ${addedCount} منتج جديد`);
-        e.target.value = '';
+        alert(`✅ اكتمل الرفع بنجاح!\n- تحديث: ${updatedCount}\n- إضافة: ${addedCount}`);
+        e.target.value = ''; 
 
       } catch (error) {
         console.error("Bulk upload error:", error);
@@ -371,1056 +408,1196 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
     reader.readAsBinaryString(file);
   };
 
-  // حساب الإحصائيات الخاصة بالعروض
-  const offersStats = useMemo(() => {
-    const discountedProducts = products.filter(p => p.discount && p.discount > 0);
-    const offerProducts = products.filter(p => p.offer && p.offer.buyQty > 0);
-    
-    return {
-      discountedCount: discountedProducts.length,
-      offerCount: offerProducts.length,
-      totalOffers: discountedProducts.length + offerProducts.length
-    };
-  }, [products]);
+  const handleExportExcel = () => {
+    try {
+      // تحضير البيانات للتصدير
+      const exportData = products.map((p, index) => ({
+        'رقم': index + 1,
+        'اسم المنتج': p.name,
+        'الباركود': p.barcode || '',
+        'الفئة': p.category,
+        'السعر': p.price,
+        'الخصم (%)': p.discount || 0,
+        'السعر بعد الخصم': p.discount ? p.price * (1 - (p.discount / 100)) : p.price,
+        'المخزون': p.stock,
+        'الحالة': p.isActive === false ? 'مخفي' : 'ظاهر',
+        'الحد الأدنى للعرض (Buy Qty)': p.offer?.buyQty || 0,
+        'الكمية المجانية (Get Qty)': p.offer?.getQty || 0,
+        'تاريخ الانتهاء': p.expiryDate || '',
+        'الترتيب': (p as any).sortOrder || 0,
+        'الوصف': p.description || '',
+        'المورد': p.supplier || currentUser?.company || '',
+        'تاريخ التحديث': new Date().toLocaleDateString('ar-SA')
+      }));
+
+      // إنشاء ورقة عمل
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      
+      // تعيين تنسيق الأعمدة العربية
+      const wscols = [
+        { wch: 5 },   // رقم
+        { wch: 30 },  // اسم المنتج
+        { wch: 15 },  // الباركود
+        { wch: 15 },  // الفئة
+        { wch: 10 },  // السعر
+        { wch: 10 },  // الخصم
+        { wch: 15 },  // السعر بعد الخصم
+        { wch: 10 },  // المخزون
+        { wch: 8 },   // الحالة
+        { wch: 15 },  // Buy Qty
+        { wch: 15 },  // Get Qty
+        { wch: 12 },  // تاريخ الانتهاء
+        { wch: 8 },   // الترتيب
+        { wch: 40 },  // الوصف
+        { wch: 20 },  // المورد
+        { wch: 12 }   // تاريخ التحديث
+      ];
+      ws['!cols'] = wscols;
+
+      // إنشاء ملف Excel
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'منتجات المورد');
+
+      // اسم الملف مع التاريخ
+      const fileName = `منتجات_${currentUser?.company || 'المورد'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      // حفظ الملف
+      XLSX.writeFile(wb, fileName);
+
+      alert(`✅ تم تصدير ${products.length} منتج بنجاح إلى ملف: ${fileName}`);
+    } catch (error) {
+      console.error('خطأ في تصدير Excel:', error);
+      alert('❌ حدث خطأ أثناء تصدير الملف. حاول مرة أخرى.');
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col font-['Cairo'] no-print-bg" dir="rtl">
-      {/* Header محسن */}
-      <header className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white px-6 md:px-12 py-6 shadow-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-yellow-400 text-blue-900 rounded-2xl flex items-center justify-center text-3xl shadow-2xl font-black">
-              ES
-            </div>
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-['Cairo'] no-print-bg" dir="rtl">
+      <header className="bg-navy text-white px-6 md:px-12 py-8 relative overflow-hidden shadow-2xl">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
+          <div className="flex items-center gap-6">
+            <div className="w-20 h-20 bg-mint text-navy rounded-[2rem] flex items-center justify-center text-4xl shadow-2xl font-black italic">ES</div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight">لوحة تحكم المورد</h1>
-              <p className="text-blue-200 text-sm mt-1">
-                {currentUser?.company || 'المنشأة'} • {currentUser?.displayName}
-              </p>
+              <h1 className="text-3xl font-black tracking-tight">شركاء iB2B</h1>
+              <p className="text-mint/60 text-xs font-bold mt-1">إدارة المورد: {currentUser?.company || 'المنشأة'}</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <div className="relative">
               <button 
                 onClick={() => setIsNotifPanelOpen(!isNotifPanelOpen)}
-                className="w-12 h-12 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl transition-all relative group"
+                className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl transition-all relative"
               >
                 🔔
                 {notifications.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center font-black animate-pulse">
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full text-[10px] flex items-center justify-center font-black animate-bounce">
                     {notifications.length}
                   </span>
                 )}
-                <span className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  التنبيهات
-                </span>
               </button>
               
               {isNotifPanelOpen && (
-                <div className="absolute top-16 left-0 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 z-[100] text-gray-800 animate-slide-up">
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-black text-sm flex items-center gap-2">
-                      🔔 التنبيهات
-                      {notifications.length > 0 && (
-                        <span className="bg-red-100 text-red-600 text-xs px-2 py-1 rounded-full">
-                          {notifications.length} جديد
-                        </span>
+                <div className="absolute top-16 left-0 w-80 bg-white rounded-[2rem] shadow-2xl border border-gray-100 p-6 z-100 text-navy animate-slide-up">
+                   <div className="flex justify-between items-center mb-6">
+                      <h4 className="font-black text-sm">التنبيهات الأخيرة</h4>
+                      <button onClick={() => setIsNotifPanelOpen(false)} className="text-gray-400">✕</button>
+                   </div>
+                   <div className="space-y-4 max-h-60 overflow-y-auto custom-scrollbar">
+                      {notifications.length === 0 ? (
+                        <p className="text-[10px] text-gray-400 font-bold text-center py-4">لا توجد تنبيهات جديدة</p>
+                      ) : (
+                        notifications.map(n => (
+                          <div key={n.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                             <p className="text-[10px] font-black mb-1">{n.title}</p>
+                             <p className="text-[9px] text-gray-500 font-bold leading-relaxed">{n.message}</p>
+                          </div>
+                        ))
                       )}
-                    </h4>
-                    <button 
-                      onClick={() => setIsNotifPanelOpen(false)} 
-                      className="text-gray-400 hover:text-gray-600"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className="space-y-3 max-h-64 overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <div className="text-center py-6">
-                        <div className="text-4xl mb-2">📭</div>
-                        <p className="text-sm text-gray-400 font-bold">لا توجد تنبيهات جديدة</p>
-                      </div>
-                    ) : (
-                      notifications.map(n => (
-                        <div key={n.id} className="p-3 bg-blue-50 rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors">
-                          <p className="text-xs font-black text-blue-800 mb-1">{n.title}</p>
-                          <p className="text-xs text-blue-600">{n.message}</p>
-                          <span className="text-[10px] text-blue-400 mt-1 block">{formatDate(n.timestamp || '')}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                   </div>
                 </div>
               )}
             </div>
 
-            <button 
-              onClick={onLogout} 
-              className="bg-gradient-to-r from-rose-600 to-pink-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center gap-2"
-            >
-              <span>🚪</span>
-              تسجيل الخروج
-            </button>
+            <button onClick={onLogout} className="bg-rose-500 text-white px-10 py-4 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all">خروج آمن</button>
           </div>
         </div>
       </header>
 
-      {/* Navigation محسن */}
-      <div className="max-w-7xl mx-auto w-full px-4 md:px-6 py-8">
-        <nav className="flex bg-white p-2 rounded-2xl shadow-lg border border-gray-100 mb-8 overflow-x-auto scrollbar-hide sticky top-24 z-40">
-          {[
-            { id: 'overview', label: '📊 نظرة عامة', icon: '📊' },
-            { id: 'inventory', label: '📦 المخزون', icon: '📦' },
-            { id: 'offers', label: '🎁 العروض', icon: '🎁' },
-            { id: 'orders', label: '🧾 الطلبات', icon: '🧾' },
-            { id: 'customers', label: '👥 العملاء', icon: '👥' }
-          ].map(tab => (
-            <button 
-              key={tab.id} 
-              onClick={() => setActiveTab(tab.id as any)} 
-              className={`flex-1 min-w-[140px] flex flex-col items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm transition-all ${
-                activeTab === tab.id 
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg scale-[1.02]' 
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-              }`}
+      <div className="max-w-7xl mx-auto w-full px-6 -mt-10 relative z-20 pb-40">
+        // في ملف ESB2BSeller.tsx - ابحث عن هذا الجزء
+<nav className="flex bg-white/80 backdrop-blur-md p-2 rounded-[2.5rem] shadow-2xl border border-white mb-12 overflow-x-auto scrollbar-hide">
+  {[
+    { id: 'overview', label: '📊 الرئيسية' },
+    { id: 'inventory', label: '📦 المخزون' },
+    { id: 'offers', label: '🎁 العروض' },
+    { id: 'orders', label: '🧾 الطلبات' },
+    { id: 'customers', label: '🤝 العملاء' }
+  ].map(tab => (
+    <button 
+      key={tab.id} 
+      onClick={() => setActiveTab(tab.id as any)} 
+      className={`flex-1 min-w-[140px] flex items-center justify-center gap-3 py-4 rounded-2xl font-black text-xs transition-all ${activeTab === tab.id ? 'bg-navy text-mint shadow-2xl scale-105' : 'text-gray-400 hover:bg-white/50'}`}
+    >
+      {tab.label}
+    </button>
+  ))}
+</nav>
+
+        {activeTab === 'overview' && (
+          <div className="space-y-8 animate-fadeIn">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {stats.map((stat, i) => (
+                <div key={i} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-white group hover:shadow-xl transition-all">
+                   <div className={`w-14 h-14 rounded-2xl ${stat.color} flex items-center justify-center text-2xl text-white mb-6 group-hover:scale-110 transition-transform shadow-lg`}>{stat.icon}</div>
+                   <p className="text-[10px] text-gray-400 font-black mb-1">{stat.label}</p>
+                   <h3 className="text-2xl font-black text-navy">{formatEnNumber(stat.value)} <span className="text-[10px]">{stat.unit}</span></h3>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 bg-white p-8 rounded-[3rem] shadow-sm border border-white overflow-hidden min-h-[400px]">
+                <h3 className="text-lg font-black text-navy mb-8">أداء مبيعات المورد</h3>
+                <div className="w-full h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={MOCK_STATS}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                      <XAxis dataKey="month" hide />
+                      <YAxis hide />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="sales" stroke="#2563eb" strokeWidth={4} fillOpacity={0.1} fill="#2563eb" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="bg-slate-900 p-8 rounded-[3rem] text-white shadow-2xl flex flex-col items-center justify-center text-center">
+                 <div className="text-5xl mb-4">🚀</div>
+                 <h3 className="text-xl font-black">جاهز للتوسع؟</h3>
+                 <p className="text-gray-400 text-xs font-bold mt-2 leading-relaxed px-4">أضف منتجات جديدة وحافظ على تحديث صور البراندات لزيادة ظهورك للمشترين.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+
+{(activeTab === 'inventory' || activeTab === 'offers') && (
+  <div className="space-y-12 animate-fadeIn">
+    {activeTab === 'inventory' && (
+      <>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between px-2">
+        <h2 className="text-xl font-black text-navy">إدارة الفئات والماركات</h2>
+        <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Brand Control Grid</span>
+      </div>
+      <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+        {categoriesGrid.map((cat) => (
+          <div key={cat.name} className="group flex flex-col items-center gap-3 p-3 md:p-4 rounded-[2.5rem] bg-white/40 backdrop-blur-md border border-white transition-all duration-500 hover:shadow-xl relative">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-[1.8rem] bg-white flex items-center justify-center overflow-hidden shadow-sm relative group/logo">
+              {cat.icon.length > 2 ? (
+                <img src={cat.icon} className="w-full h-full object-cover p-2" alt={cat.name} />
+              ) : (
+                <span className="text-xl md:text-3xl">{cat.icon}</span>
+              )}
+              <button 
+                onClick={() => { setActiveBrandEditCat(cat.name); brandFileInputRef.current?.click(); }}
+                className="absolute inset-0 bg-navy/60 text-mint opacity-0 group-hover/logo:opacity-100 transition-opacity flex items-center justify-center text-[8px] font-black"
+              >تعديل</button>
+            </div>
+            <span className="text-[8px] md:text-[10px] font-black text-center text-navy/60 truncate w-full">{cat.name}</span>
+          </div>
+        ))}
+      </div>
+      <input type="file" ref={brandFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'brand')} />
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 no-print px-2">
+      <div 
+        className="bg-navy/5 backdrop-blur-md p-10 rounded-[3rem] border-2 border-dashed border-navy/20 flex flex-col items-center justify-center text-center hover:border-navy hover:bg-white transition-all duration-500 cursor-pointer group shadow-sm hover:shadow-2xl" 
+        onClick={handleAddProductClick}
+      >
+        <div className="w-16 h-16 bg-white rounded-[1.5rem] flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform duration-500">
+          <span className="text-3xl">➕</span>
+        </div>
+        <h4 className="font-black text-navy text-sm">إضافة صنف واحد</h4>
+        <p className="text-[10px] text-gray-500 font-bold opacity-80">إدخال البيانات يدوياً</p>
+      </div>
+
+      <div className="bg-mint/10 backdrop-blur-md p-10 rounded-[3rem] border-2 border-dashed border-mint/40 flex flex-col items-center justify-center text-center hover:border-mint hover:bg-white transition-all duration-500 relative group shadow-sm hover:shadow-2xl">
+        <div className="w-16 h-16 bg-white rounded-[1.5rem] flex items-center justify-center shadow-sm mb-4 group-hover:rotate-12 transition-transform duration-500">
+          <span className="text-3xl">📊</span>
+        </div>
+        <h4 className="font-black text-navy text-sm">رفع جماعي (Excel)</h4>
+        <p className="text-[10px] text-gray-500 font-bold mb-4 opacity-80">رفع 100+ منتج بضغطة واحدة</p>
+        
+        <input 
+          type="file" 
+          id="bulk-excel" 
+          className="hidden" 
+          accept=".xlsx, .xls" 
+          onChange={handleBulkUpload} 
+        />
+        <label 
+          htmlFor="bulk-excel" 
+          className="bg-navy text-mint px-8 py-3 rounded-2xl font-black text-[10px] cursor-pointer shadow-lg active:scale-95 transition-all"
+        >
+          اختر الملف
+        </label>
+      </div>
+    </div>
+    </>
+    )}
+
+<div className="bg-white/60 backdrop-blur-xl p-6 rounded-[3rem] border border-gray-100 shadow-lg flex items-center gap-4">
+  <div className="relative flex-1 flex gap-3">
+    <div className="relative flex-1">
+      <input 
+        type="text" 
+        placeholder="🔍 ابحث عن منتج بالاسم، الفئة، أو الباركود..." 
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        className="w-full pr-5 pl-14 py-4 bg-white border-2 border-gray-100 focus:border-navy focus:ring-2 focus:ring-navy/20 rounded-[1.8rem] outline-none font-bold text-gray-800 text-sm placeholder-gray-500 transition-all duration-300 shadow-sm"
+      />
+      <span className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-600 text-lg">🔍</span>
+    </div>
+    <button 
+      onClick={() => setIsScannerOpen(true)}
+      className="w-14 h-14 bg-navy text-mint rounded-[1.8rem] flex items-center justify-center text-xl shadow-lg hover:shadow-xl active:scale-95 transition-all border border-white/30"
+      title="مسح باركود"
+    >
+      📷
+    </button>
+  </div>
+  
+  {/* زر تنزيل Excel */}
+  <button
+    onClick={handleExportExcel}
+    disabled={products.length === 0}
+    className={`min-w-[200px] px-6 py-4 rounded-[1.8rem] font-black text-sm flex items-center justify-center gap-3 shadow-lg transition-all ${
+      products.length === 0 
+        ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-200' 
+        : 'bg-emerald-500 text-white hover:bg-emerald-600 active:scale-95 border border-emerald-600/20 hover:shadow-xl'
+    }`}
+  >
+    <span className="text-base">📥</span>
+    <span>تنزيل Excel ({products.length})</span>
+  </button>
+</div>
+
+<div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-8 mt-8">
+  {filteredProducts.map(p => {
+    const isHidden = p.isActive === false;
+    const isLowStock = (p.stock || 0) <= 5;
+    const finalPrice = p.discount ? p.price * (1 - p.discount / 100) : p.price;
+                return (
+                  <div key={p.id} className={`group relative bg-white/40 backdrop-blur-xl rounded-[2.5rem] md:rounded-[3rem] p-3 md:p-6 border border-white shadow-[0_40px_80px_rgba(0,0,0,0.03)] hover:shadow-[0_60px_100px_rgba(0,0,0,0.08)] transition-all duration-700 hover:-translate-y-2 flex flex-col h-full ${isHidden ? 'opacity-60' : ''}`}>
+                    {/* شارة العروض */}
+                    {p.offer && p.offer.buyQty > 0 && (
+                      <div className="absolute top-2 left-2 z-20 bg-rose-500 text-white px-3 py-1 rounded-lg shadow-lg animate-pulse">
+                        <p className="text-[10px] font-black">{p.offer.buyQty} + {p.offer.getQty}</p>
+                      </div>
+                    )}
+                    
+                    <div className="absolute -top-2 -right-2 z-20 bg-[#feee00] text-navy px-3 py-1.5 rounded-xl shadow-xl">
+                      <div className="flex flex-col items-center">
+                        {p.discount ? (
+                          <>
+                            <p className="text-[8px] line-through text-navy/40 mb-0.5">{formatEnNumber(p.price)}</p>
+                            <p className="text-xs md:text-lg font-black leading-none">{formatEnNumber(finalPrice)}<span className="text-[8px] mr-1">ج.م</span></p>
+                          </>
+                        ) : (
+                          <p className="text-xs md:text-lg font-black leading-none">{formatEnNumber(p.price)}<span className="text-[8px] mr-1">ج.م</span></p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="relative aspect-square rounded-[1.8rem] md:rounded-[2.5rem] overflow-hidden bg-white mb-4 border border-white/40 shadow-inner group-hover:shadow-2xl transition-all">
+                      <img src={p.imageUrl || '/images/placeholder.png'} className="w-full h-full object-cover p-4" alt={p.name} />
+                      <button 
+                        onClick={() => { setImageChangeId(p.id); fileInputRef.current?.click(); }}
+                        className="absolute inset-0 bg-navy/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-black"
+                      >تحديث الصورة</button>
+                    </div>
+
+                    <div className="flex-1 space-y-2 text-right">
+                       <div className="flex items-center gap-1 justify-end">
+                          <span className="text-[7px] md:text-[9px] font-black text-gray-400 uppercase tracking-widest">#{ (p as any).sortOrder || 0 } | {p.category}</span>
+                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                       </div>
+                       <h4 className="font-black text-navy text-[10px] md:text-sm leading-tight line-clamp-2">{p.name}</h4>
+                       {p.barcode && <p className="text-[8px] md:text-[9px] font-bold text-gray-400 mt-1">Barcode: {p.barcode}</p>}
+                    </div>
+
+        <div className="mt-4 pt-4 border-t border-white/40 space-y-3">
+           <div className="grid grid-cols-2 gap-2">
+              <div className="bg-white/60 p-2 rounded-xl border border-white flex flex-col items-center">
+                 <span className="text-[7px] text-gray-400 font-black mb-1">المخزون</span>
+                 <span className={`text-[10px] font-black ${isLowStock ? 'text-rose-500' : 'text-navy'}`}>{p.stock}</span>
+              </div>
+              <button 
+                onClick={() => handleToggleVisibility(p)}
+                className={`rounded-xl border flex items-center justify-center text-[10px] font-black transition-all ${isHidden ? 'bg-rose-50 border-rose-100 text-rose-500' : 'bg-emerald-50 border-emerald-100 text-emerald-500'}`}
+              >
+                {isHidden ? 'مخفي' : 'ظاهر'}
+              </button>
+           </div>
+           <button 
+            onClick={() => handleEditProduct(p)}
+            className="w-full bg-navy text-[#feee00] py-3 rounded-2xl text-[10px] font-black shadow-lg"
+           >تعديل كامل البيانات</button>
+        </div>
+      </div>
+    );
+  })}
+            </div>
+            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'list')} />
+          </div>
+        )}
+
+        {activeTab === 'orders' && (
+  <div className="space-y-6 animate-fadeIn">
+    {/* شريط الفلترة - تم تعديله ليدعم العودة للخلف */}
+    <div className="bg-white/40 backdrop-blur-xl p-4 rounded-[2rem] border border-white flex flex-wrap gap-2 items-center justify-between">
+       <div className="flex gap-2">
+         {selectedCustomerForOrders ? (
+           <button 
+             onClick={() => setSelectedCustomerForOrders(null)}
+             className="px-6 py-2 rounded-xl font-black text-[10px] bg-navy text-mint shadow-lg flex items-center gap-2 hover:scale-105 transition-all"
+           >
+             <span>🔙 العودة لقائمة العملاء</span>
+           </button>
+         ) : (
+           ['all', 'pending', 'processing', 'delivered', 'cancelled'].map(f => (
+             <button 
+               key={f}
+               onClick={() => setOrderStatusFilter(f as any)}
+               className={`px-6 py-2 rounded-xl font-black text-[10px] transition-all ${orderStatusFilter === f ? 'bg-navy text-mint shadow-lg' : 'bg-white/60 text-gray-400 border'}`}
+             >
+               {f === 'all' ? 'الكل' : f === 'pending' ? 'جديد' : f === 'processing' ? 'تجهيز' : f === 'delivered' ? 'مكتمل' : 'ملغي'}
+             </button>
+           ))
+         )}
+       </div>
+       <p className="text-[10px] font-black text-gray-400 ml-4">
+         {selectedCustomerForOrders ? `طلبات العميل: ${selectedCustomerForOrders}` : `إجمالي العملاء: ${Array.from(new Set(filteredOrders.map(o => o.customerName))).length}`}
+       </p>
+    </div>
+
+    {!selectedCustomerForOrders ? (
+      /* المرحلة الأولى: عرض العملاء فقط */
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from(new Set(filteredOrders.map(o => o.customerName))).map(customer => {
+          const customerOrders = filteredOrders.filter(o => o.customerName === customer);
+          return (
+            <div 
+              key={customer}
+              onClick={() => setSelectedCustomerForOrders(customer)}
+              className="bg-white p-6 rounded-[2rem] border border-white shadow-sm hover:shadow-xl transition-all cursor-pointer group flex items-center justify-between"
             >
-              <span className="text-xl">{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        {/* محتوى التبويبات */}
-        <div className="min-h-[600px]">
-          {activeTab === 'overview' && (
-            <div className="space-y-8 animate-fadeIn">
-              {/* بطاقات الإحصائيات المحسنة */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {stats.map((stat, i) => (
-                  <div key={i} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 group">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className={`w-12 h-12 rounded-xl ${stat.color} flex items-center justify-center text-2xl ${stat.textColor} shadow-md group-hover:scale-110 transition-transform`}>
-                        {stat.icon}
-                      </div>
-                      <span className="text-xs font-bold text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
-                        اليوم
-                      </span>
-                    </div>
-                    <h3 className="text-2xl font-black text-gray-800 mb-1">
-                      {formatEnNumber(stat.value)} <span className="text-sm text-gray-500">{stat.unit}</span>
-                    </h3>
-                    <p className="text-sm font-bold text-gray-600">{stat.label}</p>
-                    <div className="mt-4 h-1 w-full bg-gray-100 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${stat.color.split(' ')[0]} rounded-full`}
-                        style={{ width: `${Math.min(100, (stat.value / (stat.value + 1000)) * 100)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* مخطط ومعلومات إضافية */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-lg border border-gray-100">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-black text-gray-800">مخطط أداء المبيعات</h3>
-                    <select className="text-sm font-bold text-gray-600 bg-gray-50 px-4 py-2 rounded-xl border border-gray-200 outline-none">
-                      <option>آخر 30 يوم</option>
-                      <option>آخر 90 يوم</option>
-                      <option>هذه السنة</option>
-                    </select>
-                  </div>
-                  <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={MOCK_STATS}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                        <XAxis dataKey="month" hide />
-                        <YAxis hide />
-                        <Tooltip 
-                          formatter={(value) => [`${value} ر.س`, 'المبيعات']}
-                          labelFormatter={(label) => `الشهر: ${label}`}
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey="sales" 
-                          stroke="#4f46e5" 
-                          strokeWidth={3}
-                          fill="url(#colorSales)" 
-                          fillOpacity={0.1}
-                        />
-                        <defs>
-                          <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-navy/5 rounded-xl flex items-center justify-center text-xl group-hover:bg-navy group-hover:text-white transition-all">
+                  👤
                 </div>
-
-                <div className="space-y-6">
-                  <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl">
-                    <div className="text-4xl mb-4">🚀</div>
-                    <h3 className="text-xl font-black mb-2">جاهز للتوسع؟</h3>
-                    <p className="text-sm text-blue-100 mb-6">
-                      أضف منتجات جديدة وحافظ على تحديث صور العلامات التجارية لزيادة ظهورك للمشترين.
-                    </p>
-                    <button 
-                      onClick={handleAddProductClick}
-                      className="w-full bg-white text-blue-600 py-3 rounded-xl font-bold text-sm hover:bg-blue-50 transition-all shadow-lg"
-                    >
-                      + إضافة منتج جديد
-                    </button>
-                  </div>
-
-                  <div className="bg-white rounded-3xl p-6 shadow-lg border border-gray-100">
-                    <h4 className="font-black text-gray-800 mb-4">نظرة سريعة</h4>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-                        <span className="text-sm font-bold text-gray-600">منتجات منخفضة المخزون</span>
-                        <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full">
-                          {products.filter(p => p.stock <= 5).length}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-                        <span className="text-sm font-bold text-gray-600">طلبات قيد الانتظار</span>
-                        <span className="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full">
-                          {orders.filter(o => o.status === 'pending').length}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                <div>
+                  <h4 className="font-black text-navy text-sm">{customer}</h4>
+                  <p className="text-[10px] text-gray-400 font-bold">{customerOrders.length} طلبات</p>
                 </div>
               </div>
+              <span className="text-navy/20 group-hover:translate-x-[-5px] transition-all">◀</span>
             </div>
-          )}
-
-          {(activeTab === 'inventory' || activeTab === 'offers') && (
-            <div className="space-y-8 animate-fadeIn">
-              {activeTab === 'offers' && (
-                <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-3xl p-6 border border-amber-100 mb-8">
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div>
-                      <h2 className="text-2xl font-black text-amber-900 mb-2">🎁 إدارة العروض والخصومات</h2>
-                      <p className="text-sm text-amber-700">
-                        {offersStats.totalOffers} عرض نشط • {offersStats.discountedCount} خصم • {offersStats.offerCount} عرض كمية
-                      </p>
-                    </div>
-                    <div className="flex gap-3">
-                      <button 
-                        onClick={() => setActiveTab('inventory')}
-                        className="bg-white text-amber-700 border border-amber-200 px-6 py-3 rounded-xl font-bold text-sm hover:bg-amber-50 transition-all"
-                      >
-                        إدارة المخزون
-                      </button>
-                      <button 
-                        onClick={handleAddProductClick}
-                        className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all"
-                      >
-                        + إضافة عرض جديد
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'inventory' && (
-                <>
-                  <div className="space-y-6">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                      <div>
-                        <h2 className="text-2xl font-black text-gray-800">📂 الفئات والعلامات التجارية</h2>
-                        <p className="text-sm text-gray-500 mt-1">إدارة صور الفئات للتصنيفات المختلفة</p>
-                      </div>
-                      <span className="text-xs font-bold text-gray-400 bg-gray-100 px-3 py-2 rounded-xl">
-                        {categoriesGrid.length} فئة نشطة
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
-                      {categoriesGrid.map((cat) => (
-                        <div key={cat.name} className="group flex flex-col items-center gap-3 p-4 rounded-2xl bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all">
-                          <div className="relative w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center overflow-hidden">
-                            {cat.icon.length > 2 ? (
-                              <img src={cat.icon} className="w-full h-full object-cover" alt={cat.name} />
-                            ) : (
-                              <span className="text-2xl text-gray-400">📁</span>
-                            )}
-                            <button 
-                              onClick={() => { setActiveBrandEditCat(cat.name); brandFileInputRef.current?.click(); }}
-                              className="absolute inset-0 bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs font-bold"
-                            >
-                              تغيير الصورة
-                            </button>
+          );
+        })}
+      </div>
+    ) : (
+      /* المرحلة الثانية: عرض جدول الطلبات (نفس الكود القديم تماماً) */
+      <div className="bg-white/40 backdrop-blur-xl rounded-[3rem] border border-white overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-right border-collapse">
+            <thead className="bg-navy text-white">
+              <tr className="text-[10px] font-black uppercase tracking-widest">
+                <th className="px-6 py-6 border-b border-white/10">رقم الطلب</th>
+                <th className="px-6 py-6 border-b border-white/10">التاريخ</th>
+                <th className="px-6 py-6 border-b border-white/10">المنتجات</th>
+                <th className="px-6 py-6 border-b border-white/10">الإجمالي</th>
+                <th className="px-6 py-6 border-b border-white/10 text-center">الحالة</th>
+                <th className="px-6 py-6 border-b border-white/10 text-center">الإجراء</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/20">
+              {filteredOrders
+                .filter(o => o.customerName === selectedCustomerForOrders)
+                .map(o => (
+                  <tr key={o.id} className="hover:bg-white/30 transition-colors group">
+                    <td className="px-6 py-5">
+                      <span className="text-[9px] text-gray-400 font-bold tracking-tighter">#{o.id.substring(0, 8)}</span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <span className="text-[10px] font-bold text-gray-500">{formatDate(o.date)}</span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="max-w-[200px] flex flex-col gap-1">
+                        {o.items.slice(0, 2).map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center bg-white/40 p-1.5 rounded-lg border border-white/50">
+                            <span className="text-[9px] font-black text-navy truncate flex-1 ml-2">{item.productName}</span>
+                            <span className="text-[8px] bg-navy/5 px-1.5 rounded font-bold">x{item.quantity}</span>
                           </div>
-                          <span className="text-xs font-bold text-gray-700 text-center truncate w-full">{cat.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <input type="file" ref={brandFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'brand')} />
-                  </div>
-
-                  {/* أزرار الإضافة والرفع */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    <div 
-                      onClick={handleAddProductClick}
-                      className="bg-gradient-to-br from-blue-50 to-indigo-50 p-8 rounded-3xl border-2 border-dashed border-blue-200 flex flex-col items-center justify-center text-center hover:border-blue-400 hover:bg-white transition-all duration-300 cursor-pointer group"
-                    >
-                      <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform duration-300">
-                        <span className="text-4xl text-blue-500">➕</span>
+                        ))}
                       </div>
-                      <h4 className="font-black text-blue-700 text-lg mb-2">إضافة منتج جديد</h4>
-                      <p className="text-sm text-blue-600">إدخال البيانات يدوياً للمنتجات الفردية</p>
-                      <div className="mt-4 bg-white text-blue-600 px-6 py-2 rounded-xl font-bold text-sm">
-                        ابدأ الآن
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-8 rounded-3xl border-2 border-dashed border-emerald-200 flex flex-col items-center justify-center text-center hover:border-emerald-400 hover:bg-white transition-all duration-300">
-                      <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
-                        <span className="text-4xl text-emerald-500">📊</span>
-                      </div>
-                      <h4 className="font-black text-emerald-700 text-lg mb-2">رفع جماعي عبر Excel</h4>
-                      <p className="text-sm text-emerald-600">رفع 100+ منتج بضغطة واحدة</p>
-                      <input 
-                        type="file" 
-                        id="bulk-excel" 
-                        className="hidden" 
-                        accept=".xlsx, .xls" 
-                        onChange={handleBulkUpload} 
-                      />
-                      <label 
-                        htmlFor="bulk-excel" 
-                        className="mt-4 bg-white text-emerald-600 px-6 py-2 rounded-xl font-bold text-sm cursor-pointer hover:bg-emerald-50 transition-all shadow-sm"
-                      >
-                        اختر ملف Excel
-                      </label>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* شريط البحث */}
-              <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-200">
-                <div className="flex flex-col sm:flex-row gap-4 items-center">
-                  <div className="relative flex-1 w-full">
-                    <input 
-                      type="text" 
-                      placeholder="ابحث عن منتج بالاسم، الفئة، أو الباركود..." 
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pr-12 pl-4 py-3 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 rounded-xl outline-none font-bold text-sm"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-                  </div>
-                  <div className="flex gap-3">
-                    <button 
-                      onClick={() => setIsScannerOpen(true)}
-                      className="w-12 h-12 bg-blue-500 text-white rounded-xl flex items-center justify-center text-xl shadow-lg hover:bg-blue-600 transition-all"
-                      title="مسح الباركود"
-                    >
-                      📷
-                    </button>
-                    <select 
-                      value={activeTab === 'offers' ? 'offers' : 'all'}
-                      onChange={(e) => e.target.value === 'offers' ? setActiveTab('offers') : null}
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold outline-none"
-                    >
-                      <option value="all">جميع المنتجات</option>
-                      <option value="offers">العروض فقط</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="mt-3 text-xs text-gray-500 font-bold">
-                  {filteredProducts.length} منتج معروض • {
-                    activeTab === 'offers' 
-                      ? `${offersStats.totalOffers} عرض نشط` 
-                      : `${products.filter(p => p.stock <= 5).length} منتج منخفض المخزون`
-                  }
-                </div>
-              </div>
-
-              {/* شبكة المنتجات */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredProducts.map(p => {
-                  const isHidden = p.isActive === false;
-                  const isLowStock = (p.stock || 0) <= 5;
-                  const finalPrice = p.discount ? p.price * (1 - p.discount / 100) : p.price;
-                  const hasOffer = p.offer?.buyQty > 0;
-                  const hasDiscount = p.discount > 0;
-
-                  return (
-                    <div key={p.id} className={`bg-white rounded-2xl overflow-hidden border border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all duration-300 ${isHidden ? 'opacity-60' : ''}`}>
-                      {/* شارة العروض والخصومات */}
-                      <div className="absolute top-3 right-3 z-10 flex flex-col gap-1">
-                        {hasOffer && (
-                          <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-1 rounded-lg shadow-lg">
-                            <p className="text-xs font-black">{p.offer.buyQty} + {p.offer.getQty} مجاناً</p>
-                          </div>
-                        )}
-                        {hasDiscount && !hasOffer && (
-                          <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white px-3 py-1 rounded-lg shadow-lg">
-                            <p className="text-xs font-black">خصم {p.discount}%</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* الصورة */}
-                      <div className="relative h-48 bg-gray-100 overflow-hidden group">
-                        <img 
-                          src={p.imageUrl || 'https://via.placeholder.com/400x400/f8fafc/94a3b8?text=No+Image'} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          alt={p.name}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <button 
-                          onClick={() => { setImageChangeId(p.id); fileInputRef.current?.click(); }}
-                          className="absolute inset-0 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity text-sm font-bold"
+                    </td>
+                    <td className="px-6 py-5">
+                      <span className="font-black text-navy text-sm">{formatEnNumber(o.total)} <small className="text-[10px] text-gray-400 mr-1">ج.م</small></span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="flex justify-center">
+                        <select 
+                          value={o.status} 
+                          onChange={(e) => onUpdateOrderStatus(o.id, e.target.value as any)}
+                          className={`text-[9px] font-black border rounded-full px-4 py-2 outline-none cursor-pointer ${
+                            o.status === 'pending' ? 'bg-orange-50 text-orange-600 border-orange-100' : 
+                            o.status === 'delivered' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'
+                          }`}
                         >
-                          تحديث الصورة
-                        </button>
+                          <option value="pending">⏳ قيد المراجعة</option>
+                          <option value="processing">⚙️ جاري التجهيز</option>
+                          <option value="shipped">🚚 تم الشحن</option>
+                          <option value="delivered">✅ تم التسليم</option>
+                          <option value="cancelled">🚫 ملغي</option>
+                        </select>
                       </div>
-
-                      {/* معلومات المنتج */}
-                      <div className="p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                                #{p.barcode || 'N/A'}
-                              </span>
-                              <span className={`w-2 h-2 rounded-full ${isLowStock ? 'bg-red-500' : 'bg-green-500'}`} />
-                            </div>
-                            <h4 className="font-bold text-gray-800 text-sm line-clamp-2">{p.name}</h4>
-                          </div>
-                          <div className="text-right">
-                            {hasDiscount ? (
-                              <>
-                                <p className="text-xs line-through text-gray-400">{formatEnNumber(p.price)} ر.س</p>
-                                <p className="text-lg font-black text-blue-600">{formatEnNumber(finalPrice)} ر.س</p>
-                              </>
-                            ) : (
-                              <p className="text-lg font-black text-gray-800">{formatEnNumber(p.price)} ر.س</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <p className="text-xs text-gray-500 mb-3">{p.category}</p>
-
-                        {/* المخزون والحالة */}
-                        <div className="flex justify-between items-center mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="text-center">
-                              <p className="text-xs text-gray-500">المخزون</p>
-                              <p className={`text-sm font-bold ${isLowStock ? 'text-red-600' : 'text-green-600'}`}>
-                                {p.stock} وحدة
-                              </p>
-                            </div>
-                            <div className="h-8 w-px bg-gray-200" />
-                            <div className="text-center">
-                              <p className="text-xs text-gray-500">الحالة</p>
-                              <p className={`text-sm font-bold ${isHidden ? 'text-gray-500' : 'text-green-600'}`}>
-                                {isHidden ? 'مخفي' : 'نشط'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* الأزرار */}
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => handleToggleVisibility(p)}
-                            className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                              isHidden 
-                                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' 
-                                : 'bg-green-100 text-green-700 hover:bg-green-200'
-                            }`}
-                          >
-                            {isHidden ? 'إظهار' : 'إخفاء'}
-                          </button>
-                          <button 
-                            onClick={() => handleEditProduct(p)}
-                            className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg text-xs font-bold hover:bg-blue-700 transition-all"
-                          >
-                            تعديل
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {filteredProducts.length === 0 && (
-                <div className="text-center py-16 bg-white rounded-3xl border border-gray-200">
-                  <div className="text-6xl mb-4 opacity-20">📦</div>
-                  <h3 className="text-xl font-black text-gray-400 mb-2">لا توجد منتجات</h3>
-                  <p className="text-gray-500 mb-6">لم يتم العثور على منتجات تطابق معايير البحث</p>
-                  <button 
-                    onClick={handleAddProductClick}
-                    className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all"
-                  >
-                    + إضافة أول منتج
-                  </button>
-                </div>
-              )}
-
-              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'list')} />
-            </div>
-          )}
-
-          {activeTab === 'orders' && (
-            <div className="space-y-6 animate-fadeIn">
-              {/* فلتر الحالة */}
-              <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-200">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { id: 'all', label: 'الكل', color: 'bg-gray-100 text-gray-700', count: orders.length },
-                      { id: 'pending', label: 'جديد', color: 'bg-amber-100 text-amber-700', count: orders.filter(o => o.status === 'pending').length },
-                      { id: 'processing', label: 'تجهيز', color: 'bg-blue-100 text-blue-700', count: orders.filter(o => o.status === 'processing').length },
-                      { id: 'delivered', label: 'مكتمل', color: 'bg-green-100 text-green-700', count: orders.filter(o => o.status === 'delivered').length },
-                      { id: 'cancelled', label: 'ملغي', color: 'bg-red-100 text-red-700', count: orders.filter(o => o.status === 'cancelled').length }
-                    ].map(f => (
+                    </td>
+                    <td className="px-6 py-5 text-center">
                       <button 
-                        key={f.id}
-                        onClick={() => setOrderStatusFilter(f.id as any)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
-                          orderStatusFilter === f.id 
-                            ? `${f.color} border-2 border-current` 
-                            : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
-                        }`}
+                        onClick={() => setSelectedOrderDetails(o)} 
+                        className="bg-white border border-gray-100 text-navy p-2 px-3 rounded-xl hover:bg-navy hover:text-[#feee00] transition-all text-[9px] font-black"
                       >
-                        <span>{f.label}</span>
-                        <span className={`text-xs px-2 py-1 rounded-full ${orderStatusFilter === f.id ? 'bg-white/50' : 'bg-gray-200'}`}>
-                          {f.count}
-                        </span>
+                        📄 عرض
                       </button>
-                    ))}
-                  </div>
-                  <p className="text-sm font-bold text-gray-600">
-                    إجمالي المعروض: <span className="text-blue-600">{filteredOrders.length}</span> طلب
-                  </p>
-                </div>
-              </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
+  </div>
+)}
 
-              {/* جدول الطلبات */}
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr className="text-right">
-                        <th className="px-6 py-4 text-sm font-black text-gray-700">العميل</th>
-                        <th className="px-6 py-4 text-sm font-black text-gray-700">التاريخ</th>
-                        <th className="px6 py-4 text-sm font-black text-gray-700">المنتجات</th>
-                        <th className="px-6 py-4 text-sm font-black text-gray-700">الإجمالي</th>
-                        <th className="px-6 py-4 text-sm font-black text-gray-700 text-center">الحالة</th>
-                        <th className="px-6 py-4 text-sm font-black text-gray-700 text-center">الإجراءات</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {filteredOrders.map(o => {
-                        const customerUser = (users || []).find(u => u.company === o.customerName || u.displayName === o.customerName);
-                        const waPhone = customerUser?.phone || '';
-                        
-                        const statusConfig = {
-                          pending: { color: 'bg-amber-100 text-amber-800', icon: '⏳' },
-                          processing: { color: 'bg-blue-100 text-blue-800', icon: '⚙️' },
-                          shipped: { color: 'bg-indigo-100 text-indigo-800', icon: '🚚' },
-                          delivered: { color: 'bg-green-100 text-green-800', icon: '✅' },
-                          cancelled: { color: 'bg-red-100 text-red-800', icon: '🚫' }
-                        }[o.status] || { color: 'bg-gray-100 text-gray-800', icon: '📦' };
-
-                        return (
-                          <tr key={o.id} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="flex flex-col">
-                                <span className="font-bold text-gray-800 text-sm">{o.customerName}</span>
-                                <span className="text-xs text-gray-500">#{o.id.substring(0, 8)}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="text-sm font-bold text-gray-600">{formatDate(o.date)}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="max-w-[200px]">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-xs text-gray-500">عدد المنتجات:</span>
-                                  <span className="text-sm font-bold text-gray-800">{o.items.length}</span>
-                                </div>
-                                <div className="text-xs text-gray-500 truncate">
-                                  {o.items.slice(0, 2).map(item => item.productName).join('، ')}
-                                  {o.items.length > 2 && ` +${o.items.length - 2} أكثر`}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="font-bold text-gray-800 text-lg">{formatEnNumber(o.total)}</span>
-                              <span className="text-xs text-gray-500 mr-1">ر.س</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex justify-center">
-                                <select 
-                                  value={o.status}
-                                  onChange={(e) => onUpdateOrderStatus(o.id, e.target.value as any)}
-                                  className={`text-sm font-bold rounded-xl px-4 py-2 outline-none cursor-pointer transition-all ${statusConfig.color} border border-transparent hover:border-current`}
-                                >
-                                  <option value="pending">⏳ قيد المراجعة</option>
-                                  <option value="processing">⚙️ جاري التجهيز</option>
-                                  <option value="shipped">🚚 تم الشحن</option>
-                                  <option value="delivered">✅ تم التسليم</option>
-                                  <option value="cancelled">🚫 ملغي</option>
-                                </select>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex justify-center gap-2">
-                                {waPhone && (
-                                  <button 
-                                    onClick={() => sendOrderInvoiceWhatsApp(o, waPhone)}
-                                    className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:shadow-lg transition-all"
-                                    title="إرسال الفاتورة عبر واتساب"
-                                  >
-                                    <span>💬</span>
-                                    <span>فاتورة واتساب</span>
-                                  </button>
-                                )}
-                                <button 
-                                  onClick={() => setSelectedOrderDetails(o)}
-                                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-gray-200 transition-all"
-                                >
-                                  <span>📄</span>
-                                  <span>عرض التفاصيل</span>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  
-                  {filteredOrders.length === 0 && (
-                    <div className="py-16 text-center">
-                      <div className="text-6xl mb-4 opacity-20">📭</div>
-                      <h3 className="text-xl font-black text-gray-400 mb-2">لا توجد طلبات</h3>
-                      <p className="text-gray-500">لم يتم العثور على طلبات تطابق معايير البحث</p>
-                    </div>
-                  )}
-                </div>
+        {activeTab === 'customers' && (
+          <div className="space-y-8 animate-fadeIn">
+            <div className="bg-white/40 backdrop-blur-xl p-6 rounded-[3rem] border border-white shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+              <div className="relative w-full md:w-96">
+                <input 
+                  type="text" 
+                  placeholder="بحث عن عميل..." 
+                  value={customerSearchQuery}
+                  onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                  className="w-full pr-12 pl-4 py-3 bg-white/60 border-2 border-transparent focus:border-mint rounded-2xl outline-none font-black text-xs"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
               </div>
+              <button 
+                onClick={() => {
+                  setEditingUserId(null);
+                  setUserFormData(initialUserForm);
+                  setIsCustomerModalOpen(true);
+                }}
+                className="w-full md:w-auto bg-navy text-mint px-8 py-3.5 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all"
+              >إضافة عميل جديد +</button>
             </div>
-          )}
 
-          {activeTab === 'customers' && (
-            <div className="space-y-8 animate-fadeIn">
-              {/* شريط البحث والإضافة */}
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
-                <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                  <div className="relative flex-1 w-full">
-                    <input 
-                      type="text" 
-                      placeholder="ابحث عن عميل بالاسم، الشركة، أو الهاتف..." 
-                      value={customerSearchQuery}
-                      onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                      className="w-full pr-12 pl-4 py-3 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 rounded-xl outline-none font-bold text-sm"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      setEditingUserId(null);
-                      setUserFormData(initialUserForm);
-                      setIsCustomerModalOpen(true);
-                    }}
-                    className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
-                  >
-                    <span>👤</span>
-                    إضافة عميل جديد
-                  </button>
-                </div>
-                <div className="mt-4 text-sm text-gray-500 font-bold">
-                  {filteredCustomers.length} عميل معروض • {
-                    filteredCustomers.filter(u => u.status === 'active').length
-                  } عميل نشط
-                </div>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredCustomers.map(user => {
+                const customerStats = getCustomerStats(user);
+                const isInactive = user.status === 'suspended';
+                
+                return (
+                  <div key={user.id} className={`bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden ${isInactive ? 'grayscale opacity-75' : ''}`}>
+                    <div className="absolute top-0 right-0 p-4">
+                       <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${isInactive ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                          {isInactive ? 'معطل' : 'نشط'}
+                       </span>
+                    </div>
 
-              {/* شبكة العملاء */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredCustomers.map(user => {
-                  const customerStats = getCustomerStats(user);
-                  const isInactive = user.status === 'suspended';
-                  
-                  return (
-                    <div key={user.id} className={`bg-white rounded-2xl p-6 border border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all ${isInactive ? 'grayscale opacity-75' : ''}`}>
-                      {/* رأس البطاقة */}
-                      <div className="flex justify-between items-start mb-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 border-2 border-white shadow-md overflow-hidden flex items-center justify-center">
-                            {user.logoUrl ? (
-                              <img src={user.logoUrl} className="w-full h-full object-cover" alt={user.company} />
-                            ) : (
-                              <span className="text-2xl text-blue-600">🏢</span>
-                            )}
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-gray-800 text-lg">{user.company}</h3>
-                            <p className="text-sm text-gray-500">{user.displayName}</p>
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end">
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold mb-2 ${
-                            isInactive ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-600'
-                          }`}>
-                            {isInactive ? 'معطل' : 'نشط'}
-                          </span>
-                          <button 
-                            onClick={() => handleEditCustomer(user)}
-                            className="text-gray-400 hover:text-blue-600 transition-colors"
-                            title="تعديل بيانات العميل"
-                          >
-                            ✏️
-                          </button>
-                        </div>
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="w-20 h-20 rounded-[2rem] bg-blue-50 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center text-3xl font-black shrink-0">
+                         {user.logoUrl ? (
+                            <img src={user.logoUrl} className="w-full h-full object-cover" />
+                         ) : '🏢'}
                       </div>
-
-                      {/* معلومات الاتصال */}
-                      <div className="space-y-2 mb-6">
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-gray-400">📱</span>
-                          <span className="font-bold text-gray-700">{user.phone}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-gray-400">📧</span>
-                          <span className="font-bold text-gray-700 truncate">{user.email}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-gray-400">👤</span>
-                          <span className="font-bold text-gray-700">{user.username}</span>
-                        </div>
-                      </div>
-
-                      {/* إحصائيات العميل */}
-                      <div className="grid grid-cols-2 gap-3 mb-6 p-4 bg-gray-50 rounded-xl">
-                        <div className="text-center">
-                          <p className="text-xs text-gray-500 mb-1">إجمالي الطلبات</p>
-                          <p className="text-xl font-black text-blue-600">{customerStats.count}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-gray-500 mb-1">إجمالي المبيعات</p>
-                          <p className="text-xl font-black text-green-600">{formatEnNumber(customerStats.spent)} ر.س</p>
-                        </div>
-                      </div>
-
-                      {/* آخر طلب */}
-                      <div className="mb-6">
-                        <p className="text-xs text-gray-500 mb-1">آخر طلب</p>
-                        <p className="text-sm font-bold text-gray-700">
-                          {customerStats.lastOrder !== 'لا يوجد' ? formatDate(customerStats.lastOrder) : 'لا توجد طلبات'}
-                        </p>
-                      </div>
-
-                      {/* أزرار الإجراءات */}
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => sendCredentialsWhatsApp(user)}
-                          className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3 rounded-xl text-sm font-bold hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                        >
-                          <span>💬</span>
-                          <span>إرسال البيانات</span>
-                        </button>
+                          onClick={() => handleEditCustomer(user)}
+                          className="w-10 h-10 rounded-xl bg-gray-50 text-navy hover:bg-navy hover:text-white transition-all flex items-center justify-center shadow-sm"
+                          title="تعديل بيانات العميل"
+                        >✏️</button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                    
+                    <h3 className="text-lg font-black text-navy">{user.company}</h3>
+                    <p className="text-[10px] text-gray-400 font-bold mb-4">{user.displayName} | {user.email}</p>
+                    
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                       <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100 text-center">
+                          <p className="text-[8px] text-gray-400 font-black mb-1 uppercase">إجمالي الطلبات</p>
+                          <p className="text-sm font-black text-navy">{customerStats.count}</p>
+                       </div>
+                       <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100 text-center">
+                          <p className="text-[8px] text-gray-400 font-black mb-1 uppercase">إجمالي المبيعات</p>
+                          <p className="text-sm font-black text-emerald-600">{formatEnNumber(customerStats.spent)} ج.م</p>
+                       </div>
+                    </div>
 
-              {filteredCustomers.length === 0 && (
-                <div className="text-center py-16 bg-white rounded-3xl border border-gray-200">
-                  <div className="text-6xl mb-4 opacity-20">👥</div>
-                  <h3 className="text-xl font-black text-gray-400 mb-2">لا توجد عملاء</h3>
-                  <p className="text-gray-500 mb-6">لم يتم العثور على عملاء تطابق معايير البحث</p>
-                  <button 
-                    onClick={() => {
-                      setEditingUserId(null);
-                      setUserFormData(initialUserForm);
-                      setIsCustomerModalOpen(true);
-                    }}
-                    className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all"
-                  >
-                    + إضافة أول عميل
-                  </button>
-                </div>
-              )}
+                    <div className="space-y-2 mt-4 pt-4 border-t border-gray-50">
+                       <div className="flex justify-between text-[10px] font-black">
+                          <span className="text-gray-400">اسم المستخدم:</span>
+                          <span className="text-navy">{user.username}</span>
+                       </div>
+                       <div className="flex justify-between text-[10px] font-black">
+                          <span className="text-gray-400">الجوال:</span>
+                          <span className="text-navy">{user.phone}</span>
+                       </div>
+                       <div className="flex justify-between text-[10px] font-black">
+                          <span className="text-gray-400">آخر طلب:</span>
+                          <span className="text-navy">{customerStats.lastOrder}</span>
+                       </div>
+                    </div>
+
+                    <button 
+                      onClick={() => sendCredentialsWhatsApp(user)}
+                      className="w-full mt-6 bg-emerald-500 text-white py-4 rounded-2xl font-black text-[10px] shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all"
+                    >
+                      <span>إرسال البيانات واتساب</span>
+                      <span className="text-sm">💬</span>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
+        )}
+      </div>
+
+      {selectedOrderDetails && (
+  <div className="fixed inset-0 z-[110] bg-navy/80 backdrop-blur-md flex items-center justify-center p-4">
+    {/* CSS مخصص للطباعة فقط */}
+    <style>{`
+      @media print {
+        /* إخفاء كل شيء ما عدا الفاتورة */
+        body *:not(#printable-area):not(#printable-area *) {
+          display: none !important;
+        }
+
+        /* إعادة ضبط الفاتورة */
+        #printable-area {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          background: white;
+          padding: 30px;
+          font-family: 'Cairo', sans-serif;
+        }
+
+        /* إلغاء قيود المودال */
+        .max-h-\\[90vh\\] {
+          max-height: none !important;
+        }
+
+        .overflow-y-auto {
+          overflow: visible !important;
+        }
+
+        .fixed {
+          position: static !important;
+        }
+
+        /* تنسيق الجدول */
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 20px 0;
+          font-size: 12px;
+        }
+
+        th {
+          background-color: #1e293b !important;
+          color: white !important;
+          padding: 12px;
+          text-align: center;
+          font-weight: 900;
+          border: 1px solid #334155;
+        }
+
+        td {
+          padding: 10px;
+          border: 1px solid #cbd5e1;
+          text-align: center;
+        }
+
+        tr {
+          page-break-inside: avoid;
+        }
+
+        @page {
+          size: A4;
+          margin: 15mm;
+        }
+
+        .no-print {
+          display: none !important;
+        }
+        
+        /* تنسيق الإجماليات */
+        .totals-table {
+          width: 50%;
+          margin-left: auto;
+          border-collapse: collapse;
+        }
+        
+        .totals-table td {
+          padding: 8px 15px;
+          border: none;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .totals-table .total-row {
+          background-color: #f8fafc;
+          font-weight: 900;
+          font-size: 14px;
+        }
+      }
+    `}</style>
+
+    <div className="bg-white w-full max-w-2xl rounded-[3.5rem] shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
+      {/* Header */}
+      <div className="p-8 bg-navy text-white flex justify-between items-center shrink-0 no-print">
+        <div>
+          <h3 className="text-2xl font-black">تفاصيل الطلب #{selectedOrderDetails.id.substring(0, 8)}</h3>
+          <p className="text-[10px] font-bold text-mint uppercase tracking-widest mt-1">المحل: {selectedOrderDetails.customerName}</p>
+        </div>
+        <button onClick={() => setSelectedOrderDetails(null)} className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl transition-all">✕</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        {/* المحتوى الذي سيظهر في الطباعة */}
+        <div id="printable-area">
+          {/* رأس الفاتورة */}
+          <div className="text-center mb-8 border-b-2 border-navy pb-6">
+            <h1 className="text-3xl font-black text-navy mb-2">فاتورة ضريبية</h1>
+            <p className="text-sm font-bold text-gray-700">العميل: {selectedOrderDetails.customerName}</p>
+            <p className="text-xs text-gray-500">التاريخ: {formatDate(selectedOrderDetails.date)}</p>
+            <p className="text-xs text-gray-500">رقم الفاتورة: #{selectedOrderDetails.id.substring(0, 8)}</p>
+          </div>
+
+          {/* جدول المنتجات */}
+          <table className="w-full border-collapse border border-gray-300 text-right mb-8" dir="rtl">
+            <thead>
+              <tr className="bg-navy text-white">
+                <th className="border border-gray-300 p-3 text-sm font-black">#</th>
+                <th className="border border-gray-300 p-3 text-sm font-black">الباركود</th>
+                <th className="border border-gray-300 p-3 text-sm font-black">اسم المنتج</th>
+                <th className="border border-gray-300 p-3 text-sm font-black">الكمية</th>
+                <th className="border border-gray-300 p-3 text-sm font-black">سعر الوحدة</th>
+                <th className="border border-gray-300 p-3 text-sm font-black">الإجمالي</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedOrderDetails.items.map((item, idx) => {
+                // حساب السعر والكمية بشكل صحيح
+                const price = item.price || item.unitPrice || 0;
+                const quantity = item.quantity || 1;
+                const total = price * quantity;
+                
+                return (
+                  <tr key={idx} className="border-b border-gray-200">
+                    <td className="border border-gray-300 p-3 text-sm text-center">{idx + 1}</td>
+                    <td className="border border-gray-300 p-3 text-sm font-mono text-center" dir="ltr">{item.barcode || item.code || '-'}</td>
+                    <td className="border border-gray-300 p-3 text-sm font-bold text-black text-right">{item.productName || item.name || "منتج"}</td>
+                    <td className="border border-gray-300 p-3 text-sm text-center">{formatEnNumber(quantity)}</td>
+                    <td className="border border-gray-300 p-3 text-sm text-center">{formatEnNumber(price)} ج.م</td>
+                    <td className="border border-gray-300 p-3 text-sm text-center font-black">{formatEnNumber(total)} ج.م</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* قسم الإجماليات والضريبة */}
+          {(() => {
+            const subtotal = selectedOrderDetails.items.reduce((sum, item) => {
+              const price = item.price || item.unitPrice || 0;
+              const quantity = item.quantity || 1;
+              return sum + (price * quantity);
+            }, 0);
+            const tax = subtotal * 0.15;
+            const total = subtotal + tax;
+            
+            return (
+              <div className="flex justify-end mb-6">
+                <table className="totals-table w-96 border-collapse">
+                  <tbody>
+                    <tr>
+                      <td className="p-3 text-right font-bold text-gray-700">مجموع المنتجات:</td>
+                      <td className="p-3 text-left font-mono font-bold">{formatEnNumber(subtotal.toFixed(2))} ج.م</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-right font-bold text-gray-700">ضريبة القيمة المضافة (15%):</td>
+                      <td className="p-3 text-left font-mono font-bold">{formatEnNumber(tax.toFixed(2))} ج.م</td>
+                    </tr>
+                    <tr className="total-row bg-gray-100">
+                      <td className="p-4 text-right font-black text-lg">الإجمالي الكلي:</td>
+                      <td className="p-4 text-left font-black text-lg text-blue-700">{formatEnNumber(total.toFixed(2))} ج.م</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+
+          {/* توقيع وشكر */}
+          <div className="mt-10 text-center border-t border-gray-200 pt-6">
+            <p className="text-sm text-gray-600 mb-2">شكراً لتعاملكم معنا</p>
+            <p className="text-xs text-gray-400">{currentUser?.company || 'iB2B Platform'}</p>
+          </div>
+        </div>
+
+        {/* العرض المرئي في التطبيق */}
+        <div className="space-y-6 print:hidden">
+          <div className="flex items-center justify-between border-b pb-4 border-gray-100">
+            <h4 className="font-black text-navy text-sm flex items-center gap-2">
+              <span>📦 أصناف الطلب</span>
+              <span className="bg-gray-100 px-3 py-1 rounded-full text-[10px] text-gray-500">{selectedOrderDetails.items.length} منتجات</span>
+            </h4>
+            <p className="text-[10px] font-bold text-gray-400">{formatDate(selectedOrderDetails.date)}</p>
+          </div>
+
+          <div className="space-y-3">
+            {selectedOrderDetails.items.map((item, idx) => {
+              const price = item.price || item.unitPrice || 0;
+              const quantity = item.quantity || 1;
+              const total = price * quantity;
+              
+              return (
+                <div key={idx} className="flex gap-4 p-4 rounded-[2rem] border border-gray-50 bg-gray-50/30 group hover:border-mint transition-all">
+                  <div className="w-20 h-20 rounded-2xl bg-white border border-gray-100 overflow-hidden shrink-0 shadow-sm">
+                    <img src={item.imageUrl || 'https://via.placeholder.com/150'} className="w-full h-full object-cover p-2" alt={item.productName} />
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <h5 className="font-black text-navy text-sm mb-1">
+                      {item.productName || item.name || "منتج"}
+                    </h5>
+                    {item.barcode && (
+                      <p className="text-[9px] font-bold text-gray-400 mb-2">
+                        Barcode: {item.barcode}
+                      </p>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-black text-gray-400">
+                          الكمية: <b className="text-navy">{formatEnNumber(quantity)}</b>
+                        </span>
+                        <span className="text-[10px] font-black text-gray-400">
+                          سعر الوحدة: <b className="text-navy">{formatEnNumber(price)}</b>
+                        </span>
+                      </div>
+                      <span className="text-sm font-black text-blue-600">
+                        {formatEnNumber(total)} <small className="text-[10px] mr-1">ج.م</small>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* حساب الإجماليات للعرض المرئي */}
+          {(() => {
+            const subtotal = selectedOrderDetails.items.reduce((sum, item) => {
+              const price = item.price || item.unitPrice || 0;
+              const quantity = item.quantity || 1;
+              return sum + (price * quantity);
+            }, 0);
+            const tax = subtotal * 0.15;
+            const total = subtotal + tax;
+
+            return (
+              <div className="mt-10 p-8 rounded-[3rem] bg-navy text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-mint/10 blur-3xl rounded-full"></div>
+                <div className="relative z-10 space-y-4">
+                  <div className="flex justify-between items-center text-gray-400 text-xs font-bold">
+                    <span>قيمة المنتجات (صافي)</span>
+                    <span className="text-white">{formatEnNumber(subtotal.toFixed(2))} ج.م</span>
+                  </div>
+                  <div className="flex justify-between items-center text-gray-400 text-xs font-bold">
+                    <span>ضريبة القيمة المضافة (15%)</span>
+                    <span className="text-white">{formatEnNumber(tax.toFixed(2))} ج.م</span>
+                  </div>
+                  <div className="pt-4 border-t border-white/10 flex justify-between items-center">
+                    <span className="text-base font-black text-[#feee00]">الإجمالي الكلي للفاتورة</span>
+                    <span className="text-3xl font-black">
+                      {formatEnNumber(total.toFixed(2))} <small className="text-sm mr-1">ج.م</small>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
-      {/* Modal تفاصيل الطلب */}
-      {selectedOrderDetails && (
-        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-slide-up">
-            <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-700 text-white flex justify-between items-center">
-              <div>
-                <h3 className="text-2xl font-black">تفاصيل الطلب #{selectedOrderDetails.id.substring(0,8)}</h3>
-                <p className="text-sm text-blue-100">العميل: {selectedOrderDetails.customerName}</p>
+      {/* Buttons Action - إضافة أزرار جديدة للحفظ */}
+<div className="p-8 border-t bg-gray-50 flex flex-wrap gap-3 shrink-0 no-print">
+  <button 
+    onClick={() => {
+      const customer = users.find(u => u.company === selectedOrderDetails.customerName || u.displayName === selectedOrderDetails.customerName);
+      if (customer?.phone) sendOrderInvoiceWhatsApp(selectedOrderDetails, customer.phone);
+    }}
+    className="flex-1 bg-emerald-500 text-white py-4 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 min-w-[140px]"
+  >
+    <span>واتساب</span>
+    <span>💬</span>
+  </button>
+  
+  {/* زر الطباعة - إصلاح */}
+  <button 
+    onClick={() => {
+      // استخدام window.print مباشرة مع التأكد من ظهور المحتوى
+      window.print();
+    }}
+    className="flex-1 bg-navy text-mint py-4 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 min-w-[140px]"
+  >
+    <span>طباعة</span>
+    <span>🖨️</span>
+  </button>
+
+  {/* زر حفظ PDF - إصلاح بدون مكتبات خارجية */}
+  <button 
+    onClick={() => {
+      try {
+        // إنشاء محتوى HTML للفاتورة
+        const subtotal = selectedOrderDetails.items.reduce((sum, item) => {
+          const price = item.price || item.unitPrice || 0;
+          const quantity = item.quantity || 1;
+          return sum + (price * quantity);
+        }, 0);
+        const tax = subtotal * 0.15;
+        const total = subtotal + tax;
+
+        // إنشاء HTML منسق للفاتورة
+        const invoiceHTML = `
+          <!DOCTYPE html>
+          <html dir="rtl">
+          <head>
+            <meta charset="UTF-8">
+            <title>فاتورة #${selectedOrderDetails.id.substring(0, 8)}</title>
+            <style>
+              body {
+                font-family: 'Cairo', Arial, sans-serif;
+                padding: 30px;
+                max-width: 800px;
+                margin: 0 auto;
+              }
+              .header {
+                text-align: center;
+                border-bottom: 2px solid #1e293b;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
+              }
+              .header h1 {
+                color: #1e293b;
+                font-size: 28px;
+                margin-bottom: 15px;
+              }
+              .info {
+                margin-bottom: 20px;
+              }
+              .info p {
+                margin: 5px 0;
+                font-size: 14px;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 30px 0;
+              }
+              th {
+                background-color: #1e293b;
+                color: white;
+                padding: 12px;
+                font-weight: bold;
+                border: 1px solid #334155;
+              }
+              td {
+                padding: 10px;
+                border: 1px solid #cbd5e1;
+                text-align: center;
+              }
+              .totals {
+                width: 50%;
+                margin-left: auto;
+              }
+              .totals td {
+                padding: 8px 15px;
+                border: none;
+                border-bottom: 1px solid #e2e8f0;
+              }
+              .grand-total {
+                background-color: #f8fafc;
+                font-weight: bold;
+                font-size: 16px;
+              }
+              .footer {
+                text-align: center;
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #e2e8f0;
+                color: #6b7280;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>فاتورة ضريبية</h1>
+              <div class="info">
+                <p><strong>العميل:</strong> ${selectedOrderDetails.customerName}</p>
+                <p><strong>التاريخ:</strong> ${formatDate(selectedOrderDetails.date)}</p>
+                <p><strong>رقم الفاتورة:</strong> #${selectedOrderDetails.id.substring(0, 8)}</p>
+                <p><strong>المورد:</strong> ${currentUser?.company || 'مورد معتمد'}</p>
               </div>
-              <button 
-                onClick={() => setSelectedOrderDetails(null)} 
-                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl transition-all"
-              >
-                ✕
-              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-6">
-                {/* معلومات الطلب */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-gray-50 p-4 rounded-xl">
-                    <p className="text-xs text-gray-500 mb-1">تاريخ الطلب</p>
-                    <p className="font-bold text-gray-800">{formatDate(selectedOrderDetails.date)}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-xl">
-                    <p className="text-xs text-gray-500 mb-1">حالة الطلب</p>
-                    <p className="font-bold text-blue-600">{selectedOrderDetails.status}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-xl">
-                    <p className="text-xs text-gray-500 mb-1">إجمالي الفاتورة</p>
-                    <p className="text-xl font-black text-gray-800">{formatEnNumber(selectedOrderDetails.total)} ر.س</p>
-                  </div>
-                </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>الباركود</th>
+                  <th>اسم المنتج</th>
+                  <th>الكمية</th>
+                  <th>سعر الوحدة</th>
+                  <th>الإجمالي</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${selectedOrderDetails.items.map((item, idx) => {
+                  const price = item.price || item.unitPrice || 0;
+                  const quantity = item.quantity || 1;
+                  const itemTotal = price * quantity;
+                  return `
+                    <tr>
+                      <td>${idx + 1}</td>
+                      <td>${item.barcode || '-'}</td>
+                      <td>${item.productName || item.name || 'منتج'}</td>
+                      <td>${formatEnNumber(quantity)}</td>
+                      <td>${formatEnNumber(price)} ج.م</td>
+                      <td>${formatEnNumber(itemTotal)} ج.م</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
 
-                {/* قائمة المنتجات */}
-                <div>
-                  <h4 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
-                    <span>📦 المنتجات المطلوبة</span>
-                    <span className="bg-gray-100 text-gray-600 text-sm px-3 py-1 rounded-full">
-                      {selectedOrderDetails.items.length} منتج
-                    </span>
-                  </h4>
-                  <div className="space-y-3">
-                    {selectedOrderDetails.items.map((item, idx) => (
-                      <div key={idx} className="flex gap-4 p-4 rounded-xl border border-gray-200 hover:border-blue-300 transition-colors">
-                        <div className="w-20 h-20 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0">
-                          <img src={item.imageUrl || 'https://via.placeholder.com/150'} className="w-full h-full object-cover" />
-                        </div>
-                        <div className="flex-1">
-                          <h5 className="font-bold text-gray-800 mb-2">{item.productName}</h5>
-                          <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-4 text-sm">
-                              <span className="text-gray-600">الكمية: <b className="text-gray-800">{item.quantity}</b></span>
-                              <span className="text-gray-600">سعر الوحدة: <b className="text-gray-800">{formatEnNumber(item.price)} ر.س</b></span>
-                            </div>
-                            <span className="text-lg font-black text-blue-600">
-                              {formatEnNumber(item.price * item.quantity)} ر.س
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            <table class="totals">
+              <tr>
+                <td><strong>مجموع المنتجات:</strong></td>
+                <td>${formatEnNumber(subtotal.toFixed(2))} ج.م</td>
+              </tr>
+              <tr>
+                <td><strong>ضريبة القيمة المضافة (15%):</strong></td>
+                <td>${formatEnNumber(tax.toFixed(2))} ج.م</td>
+              </tr>
+              <tr class="grand-total">
+                <td><strong>الإجمالي الكلي:</strong></td>
+                <td>${formatEnNumber(total.toFixed(2))} ج.م</td>
+              </tr>
+            </table>
 
-                {/* ملخص الفاتورة */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6">
-                  <h4 className="font-bold text-gray-800 text-lg mb-4">🧾 ملخص الفاتورة</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">قيمة المنتجات</span>
-                      <span className="font-bold text-gray-800">{formatEnNumber(selectedOrderDetails.total / 1.15)} ر.س</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">ضريبة القيمة المضافة (15%)</span>
-                      <span className="font-bold text-gray-800">
-                        {formatEnNumber(selectedOrderDetails.total - (selectedOrderDetails.total / 1.15))} ر.س
-                      </span>
-                    </div>
-                    <div className="pt-4 border-t border-gray-300 flex justify-between items-center">
-                      <span className="text-lg font-black text-blue-600">الإجمالي الكلي</span>
-                      <span className="text-3xl font-black text-gray-900">{formatEnNumber(selectedOrderDetails.total)} ر.س</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div class="footer">
+              <p>شكراً لتعاملكم معنا</p>
+              <p>${currentUser?.company || 'iB2B Platform'}</p>
             </div>
+          </body>
+          </html>
+        `;
 
-            {/* أزرار الإجراءات */}
-            <div className="p-6 border-t border-gray-200 bg-gray-50 flex gap-4">
-              <button 
-                onClick={() => {
-                  const customer = users.find(u => u.company === selectedOrderDetails.customerName || u.displayName === selectedOrderDetails.customerName);
-                  if (customer?.phone) sendOrderInvoiceWhatsApp(selectedOrderDetails, customer.phone);
-                }}
-                className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white py-4 rounded-xl font-bold text-lg hover:shadow-xl transition-all flex items-center justify-center gap-3"
-              >
-                <span>💬</span>
-                <span>مشاركة عبر واتساب</span>
-              </button>
-              <button 
-                onClick={() => window.print()}
-                className="px-8 bg-white border-2 border-gray-300 text-gray-700 py-4 rounded-xl font-bold text-lg hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
-              >
-                <span>🖨️</span>
-                <span>طباعة الفاتورة</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        // إنشاء نافذة جديدة للطباعة/الحفظ
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(invoiceHTML);
+        printWindow.document.close();
+        
+        // انتظار تحميل المحتوى ثم فتح نافذة الطباعة
+        printWindow.onload = function() {
+          printWindow.print();
+        };
+      } catch (error) {
+        console.error('خطأ في إنشاء PDF:', error);
+        alert('حدث خطأ أثناء إنشاء ملف PDF');
+      }
+    }}
+    className="flex-1 bg-rose-500 text-white py-4 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 min-w-[140px]"
+  >
+    <span>PDF</span>
+    <span>📄</span>
+  </button>
 
-      {/* Modal إضافة/تعديل منتج */}
-      {isProductModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-slide-up">
-            <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex justify-between items-center">
-              <h3 className="text-xl font-black">
-                {editingId ? '✏️ تعديل المنتج' : '➕ إضافة منتج جديد'}
-              </h3>
-              <button 
-                onClick={() => { setIsProductModalOpen(false); setEditingId(null); }} 
-                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl"
-              >
-                ✕
-              </button>
-            </div>
+  {/* زر حفظ Excel */}
+  <button 
+    onClick={() => {
+      try {
+        const subtotal = selectedOrderDetails.items.reduce((sum, item) => {
+          const price = item.price || item.unitPrice || 0;
+          const quantity = item.quantity || 1;
+          return sum + (price * quantity);
+        }, 0);
+        const tax = subtotal * 0.15;
+        const total = subtotal + tax;
+
+        const excelData = [
+          ['فاتورة ضريبية', '', '', '', '', ''],
+          ['العميل:', selectedOrderDetails.customerName, '', 'التاريخ:', formatDate(selectedOrderDetails.date), ''],
+          ['رقم الفاتورة:', `#${selectedOrderDetails.id.substring(0, 8)}`, '', 'المورد:', currentUser?.company || '', ''],
+          [],
+          ['#', 'الباركود', 'اسم المنتج', 'الكمية', 'سعر الوحدة', 'الإجمالي'],
+          ...selectedOrderDetails.items.map((item, idx) => {
+            const price = item.price || item.unitPrice || 0;
+            const quantity = item.quantity || 1;
+            const itemTotal = price * quantity;
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
-              {/* رفع الصورة */}
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-32 h-32 rounded-2xl border-4 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center relative overflow-hidden group cursor-pointer"
-                     onClick={() => modalFileInputRef.current?.click()}>
-                  {productForm.imageUrl ? (
-                    <img src={productForm.imageUrl} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="text-center">
-                      <div className="text-4xl text-gray-400 mb-2">🖼️</div>
-                      <p className="text-xs text-gray-500">اضغط لرفع صورة</p>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold">
-                    تغيير الصورة
-                  </div>
-                </div>
-                <input type="file" ref={modalFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'modal')} />
+            return [
+              idx + 1,
+              item.barcode || '-',
+              item.productName || item.name || "منتج",
+              quantity,
+              price,
+              itemTotal
+            ];
+          }),
+          [],
+          ['', '', '', '', 'مجموع المنتجات:', subtotal.toFixed(2)],
+          ['', '', '', '', 'ضريبة القيمة المضافة (15%):', tax.toFixed(2)],
+          ['', '', '', '', 'الإجمالي الكلي:', total.toFixed(2)],
+          [],
+          ['شكراً لتعاملكم معنا', '', '', '', '', '']
+        ];
+        
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        ws['!cols'] = [
+          { wch: 5 },   // #
+          { wch: 15 },  // الباركود
+          { wch: 40 },  // اسم المنتج
+          { wch: 10 },  // الكمية
+          { wch: 15 },  // سعر الوحدة
+          { wch: 15 }   // الإجمالي
+        ];
+        
+        XLSX.utils.book_append_sheet(wb, ws, 'فاتورة');
+        XLSX.writeFile(wb, `فاتورة_${selectedOrderDetails.id.substring(0, 8)}.xlsx`);
+      } catch (error) {
+        console.error('خطأ في إنشاء Excel:', error);
+        alert('حدث خطأ أثناء إنشاء ملف Excel');
+      }
+    }}
+    className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 min-w-[140px]"
+  >
+    <span>Excel</span>
+    <span>📊</span>
+  </button>
+</div>
+    </div>
+  </div>
+)}
+
+      {isProductModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-navy/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[95vh]">
+            <div className="p-8 border-b bg-gray-50 flex justify-between items-center shrink-0">
+              <h3 className="text-xl font-black text-navy">{editingId ? 'تعديل بيانات المنتج' : 'إضافة صنف جديد'}</h3>
+              <button onClick={() => { setIsProductModalOpen(false); setEditingId(null); }} className="text-gray-400 hover:text-navy text-xl">✕</button>
+            </div>
+            <form 
+              onSubmit={handleSubmit} 
+              className="p-8 space-y-4 overflow-y-auto custom-scrollbar"
+            >
+              <div className="flex flex-col items-center gap-3 mb-2">
+                 <div className="w-32 h-32 rounded-3xl border-4 border-dashed border-gray-100 bg-gray-50 flex items-center justify-center relative overflow-hidden group">
+                    {productForm.imageUrl ? (
+                      <img src={productForm.imageUrl} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-3xl opacity-20">🖼️</span>
+                    )}
+                    <button 
+                      type="button" 
+                      onClick={() => modalFileInputRef.current?.click()}
+                      className="absolute inset-0 bg-navy/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] font-black"
+                    >رفع صورة المنتج</button>
+                 </div>
+                 <input type="file" ref={modalFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'modal')} />
               </div>
 
-              {/* معلومات أساسية */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">اسم المنتج *</label>
-                  <input 
-                    required 
-                    placeholder="أدخل اسم المنتج..." 
-                    value={productForm.name} 
-                    onChange={e => setProductForm({...productForm, name: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-blue-500 transition-colors"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">اسم المنتج</label>
+                  <input required placeholder="أدخل اسم المنتج..." value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none" />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">الباركود</label>
-                  <input 
-                    placeholder="رقم الباركود..." 
-                    value={productForm.barcode || ''} 
-                    onChange={e => setProductForm({...productForm, barcode: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-blue-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* السعر والخصم */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">السعر (ر.س) *</label>
-                  <input 
-                    required 
-                    type="number" 
-                    step="0.01" 
-                    value={productForm.price || ''} 
-                    onChange={e => setProductForm({...productForm, price: Number(e.target.value)})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm font-bold outline-none focus:border-blue-500 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">الخصم (%)</label>
-                  <input 
-                    type="number" 
-                    placeholder="0" 
-                    value={productForm.discount || ''} 
-                    onChange={e => setProductForm({...productForm, discount: Number(e.target.value)})} 
-                    className="w-full p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-bold outline-none focus:border-red-500 transition-colors"
-                  />
-                  {productForm.discount > 0 && (
-                    <p className="text-xs text-green-600 mt-1">
-                      السعر بعد الخصم: {(productForm.price * (1 - productForm.discount / 100)).toFixed(2)} ر.س
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* الفئة والترتيب */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">الفئة *</label>
-                  <input 
-                    required 
-                    placeholder="التصنيف..." 
-                    value={productForm.category} 
-                    onChange={e => setProductForm({...productForm, category: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-blue-500 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">ترتيب العرض</label>
-                  <input 
-                    type="number" 
-                    placeholder="0" 
-                    value={productForm.sortOrder} 
-                    onChange={e => setProductForm({...productForm, sortOrder: Number(e.target.value)})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-blue-500 transition-colors"
-                  />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">الباركود</label>
+                  <input placeholder="رقم الباركود..." value={productForm.barcode || ''} onChange={e => setProductForm({...productForm, barcode: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none" />
                 </div>
               </div>
 
-              {/* المخزون */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">المخزون الحالي</label>
-                  <input 
-                    type="number" 
-                    readOnly 
-                    value={productForm.stock} 
-                    className="w-full p-3 bg-gray-100 border border-gray-300 rounded-xl text-sm text-gray-500 outline-none"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">السعر (ج.م)</label>
+                  <input required type="number" step="0.01" value={productForm.price || ''} onChange={e => setProductForm({...productForm, price: Number(e.target.value)})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-black outline-none focus:border-navy transition-all" />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">تحديث المخزون *</label>
-                  <input 
-                    required 
-                    type="number" 
-                    placeholder="أدخل الكمية..." 
-                    value={tempStock} 
-                    onChange={e => {
-                      setTempStock(e.target.value);
-                      setProductForm({...productForm, stock: Number(e.target.value)});
-                    }} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-blue-500 transition-colors"
-                  />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-rose-400 uppercase mr-1">الخصم (%)</label>
+                  <input type="number" placeholder="0" value={productForm.discount || ''} onChange={e => setProductForm({...productForm, discount: Number(e.target.value)})} className="w-full p-4 bg-rose-50 border-rose-100 text-rose-600 rounded-2xl border text-xs font-black outline-none focus:border-rose-300 transition-all" />
                 </div>
               </div>
 
-              {/* عرض الكميات */}
-              <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-200">
-                <label className="block text-sm font-bold text-amber-800 mb-3 flex items-center gap-2">
-                  <span>🎁 عرض الكميات (هدية مجانية)</span>
+              {productForm.price > 0 && (productForm.discount || 0) > 0 && (
+                <div className="mt-1 px-2">
+                  <p className="text-[10px] font-bold text-gray-400">السعر النهائي بعد الخصم: <span className="text-emerald-600 mr-1">{(productForm.price * (1 - (productForm.discount || 0) / 100)).toFixed(2)} ج.م</span></p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">الفئة</label>
+                  <input required placeholder="التصنيف..." value={productForm.category} onChange={e => setProductForm({...productForm, category: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">ترتيب العرض</label>
+                  <input type="number" placeholder="0" value={productForm.sortOrder} onChange={e => setProductForm({...productForm, sortOrder: Number(e.target.value)})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-black outline-none" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">المخزون الحالي</label>
+                  <input type="number" readOnly value={productForm.stock} className="w-full p-4 bg-gray-100 rounded-2xl border text-xs font-black text-gray-400 outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">تحديث المخزون</label>
+                  <input required type="number" placeholder="أدخل الكمية..." value={tempStock} onChange={e => {
+                    setTempStock(e.target.value);
+                    setProductForm({...productForm, stock: Number(e.target.value)});
+                  }} className="w-full p-4 bg-gray-50 rounded-2xl border border-mint/30 text-xs font-black outline-none" />
+                </div>
+              </div>
+
+              {/* قسم إعدادات العرض (Buy X Get Y) */}
+              <div className="space-y-3 p-4 bg-mint/5 rounded-[2rem] border border-mint/20">
+                <label className="text-[10px] font-black text-navy uppercase flex items-center gap-2">
+                  <span>🎁 عروض الكميات (هدية مجانية)</span>
                 </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-amber-700 mb-1">عند شراء عدد (X)</label>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500">عند شراء عدد (X)</label>
                     <input 
                       type="number" 
                       placeholder="مثلاً: 5"
@@ -1429,11 +1606,11 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
                         ...productForm, 
                         offer: { ...productForm.offer, buyQty: Number(e.target.value), type: 'buy_x_get_y' }
                       })}
-                      className="w-full p-3 bg-white border border-amber-300 rounded-xl text-sm outline-none focus:border-amber-500 transition-colors"
+                      className="w-full p-3 bg-white rounded-xl border text-xs font-black outline-none" 
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-amber-700 mb-1">يحصل على (Y) مجاناً</label>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500">يحصل على (Y) مجاناً</label>
                     <input 
                       type="number" 
                       placeholder="مثلاً: 1"
@@ -1442,92 +1619,64 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
                         ...productForm, 
                         offer: { ...productForm.offer, getQty: Number(e.target.value) }
                       })}
-                      className="w-full p-3 bg-white border border-amber-300 rounded-xl text-sm outline-none focus:border-amber-500 transition-colors"
+                      className="w-full p-3 bg-white rounded-xl border text-xs font-black outline-none" 
                     />
                   </div>
                 </div>
+                
                 {productForm.offer?.buyQty > 0 && (
-                  <div className="flex justify-between items-center mt-3 px-2">
-                    <p className="text-sm text-amber-700 font-bold">
+                  <div className="flex justify-between items-center px-2">
+                    <p className="text-[10px] text-emerald-600 font-bold">
                       العرض: {productForm.offer.buyQty} + {productForm.offer.getQty} مجاناً
                     </p>
                     <button 
                       type="button"
                       onClick={() => setProductForm({...productForm, offer: { buyQty: 0, getQty: 0, type: 'buy_x_get_y' }})}
-                      className="text-xs text-red-600 font-bold hover:text-red-800 transition-colors"
-                    >
-                      حذف العرض
-                    </button>
+                      className="text-[9px] text-rose-500 font-black underline"
+                    >حذف العرض</button>
                   </div>
                 )}
               </div>
 
-              {/* تاريخ الانتهاء والحالة */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">تاريخ الانتهاء</label>
-                  <input 
-                    type="date" 
-                    value={productForm.expiryDate || ''} 
-                    onChange={e => setProductForm({...productForm, expiryDate: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-blue-500 transition-colors"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">تاريخ الانتهاء</label>
+                  <input type="date" value={productForm.expiryDate || ''} onChange={e => setProductForm({...productForm, expiryDate: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none" />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">حالة المنتج</label>
-                  <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-300">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">الحالة</label>
+                   <div className="flex items-center h-[52px] gap-3 bg-gray-50 px-4 rounded-2xl border">
                     <input 
                       type="checkbox" 
                       checked={productForm.isActive} 
                       onChange={e => setProductForm({...productForm, isActive: e.target.checked})} 
-                      className="w-5 h-5 accent-blue-600"
+                      className="w-5 h-5 accent-mint"
                     />
-                    <span className="text-sm font-bold text-gray-700">
-                      {productForm.isActive ? 'ظاهر للعملاء' : 'مخفي عن العملاء'}
-                    </span>
+                    <span className="text-[10px] font-black text-navy">{productForm.isActive ? 'ظاهر' : 'مخفي'}</span>
                   </div>
                 </div>
               </div>
 
-              {/* الوصف */}
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">وصف المنتج</label>
-                <textarea 
-                  placeholder="اكتب تفاصيل المنتج..." 
-                  value={productForm.description} 
-                  onChange={e => setProductForm({...productForm, description: e.target.value})} 
-                  className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl h-24 text-sm outline-none focus:border-blue-500 transition-colors resize-none"
-                />
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase mr-1">وصف المنتج</label>
+                <textarea placeholder="اكتب تفاصيل المنتج..." value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border h-20 text-xs font-bold outline-none resize-none" />
               </div>
 
-              {/* زر الإرسال */}
-              <button 
-                type="submit" 
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all mt-4"
-              >
-                {editingId ? '💾 حفظ التعديلات' : '➕ إضافة المنتج'}
+              <button type="submit" className="w-full bg-navy text-mint py-5 rounded-[2rem] font-black text-sm shadow-xl active:scale-95 transition-all mt-4">
+                {editingId ? 'حفظ التعديلات ✅' : 'إضافة المنتج ✅'}
               </button>
             </form>
           </div>
         </div>
       )}
-
-      {/* Modal إضافة/تعديل عميل */}
+      
       {isCustomerModalOpen && (
-        <div className="fixed inset-0 z-[115] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-slide-up">
-            <div className="p-6 bg-gradient-to-r from-green-600 to-emerald-600 text-white flex justify-between items-center">
-              <h3 className="text-xl font-black">
-                {editingUserId ? '✏️ تعديل بيانات العميل' : '👤 إضافة عميل جديد'}
-              </h3>
-              <button 
-                onClick={() => setIsCustomerModalOpen(false)} 
-                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl"
-              >
-                ✕
-              </button>
+        <div className="fixed inset-0 z-[100] bg-navy/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[95vh]">
+            <div className="p-8 border-b bg-gray-50 flex justify-between items-center shrink-0">
+              <h3 className="text-xl font-black text-navy">{editingUserId ? 'تعديل بيانات العميل' : 'إضافة عميل (مشتري) جديد'}</h3>
+              <button onClick={() => setIsCustomerModalOpen(false)} className="text-gray-400 hover:text-navy text-xl">✕</button>
             </div>
-            
             <form 
               onSubmit={(e) => { 
                 e.preventDefault(); 
@@ -1538,166 +1687,109 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
                 }
                 setIsCustomerModalOpen(false); 
               }} 
-              className="p-6 space-y-6 overflow-y-auto"
+              className="p-8 space-y-4 overflow-y-auto custom-scrollbar"
             >
-              {/* صورة العميل */}
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-24 h-24 rounded-2xl border-4 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center relative overflow-hidden group cursor-pointer"
-                     onClick={() => userPhotoInputRef.current?.click()}>
-                  {userFormData.logoUrl ? (
-                    <img src={userFormData.logoUrl} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="text-center">
-                      <div className="text-4xl text-gray-400 mb-2">👤</div>
-                      <p className="text-xs text-gray-500">اضغط لرفع الصورة</p>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold">
-                    تغيير الصورة
-                  </div>
-                </div>
-                <input type="file" ref={userPhotoInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'user')} />
-                <p className="text-xs text-gray-500">ارفع شعار المحل أو صورة المسؤول</p>
+              <div className="flex flex-col items-center gap-3 mb-4">
+                 <div className="w-24 h-24 rounded-[2rem] border-4 border-dashed border-gray-100 bg-gray-50 flex items-center justify-center relative overflow-hidden group">
+                    {userFormData.logoUrl ? (
+                      <img src={userFormData.logoUrl} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-3xl opacity-20">👤</span>
+                    )}
+                    <button 
+                      type="button" 
+                      onClick={() => userPhotoInputRef.current?.click()}
+                      className="absolute inset-0 bg-navy/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[8px] font-black"
+                    >تغيير الصورة</button>
+                 </div>
+                 <input type="file" ref={userPhotoInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'user')} />
+                 <p className="text-[10px] text-gray-400 font-bold italic">ارفع شعار المحل أو صورة المسؤول</p>
               </div>
 
-              {/* معلومات الشركة */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">اسم الشركة / المحل *</label>
-                  <input 
-                    required 
-                    placeholder="اسم المنشأة..." 
-                    value={userFormData.company} 
-                    onChange={e => setUserFormData({...userFormData, company: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-green-500 transition-colors"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">اسم الشركة / المحل</label>
+                  <input required placeholder="اسم المنشأة..." value={userFormData.company} onChange={e => setUserFormData({...userFormData, company: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none" />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">اسم المسؤول *</label>
-                  <input 
-                    required 
-                    placeholder="اسم الشخص..." 
-                    value={userFormData.displayName} 
-                    onChange={e => setUserFormData({...userFormData, displayName: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-green-500 transition-colors"
-                  />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">اسم المسؤول</label>
+                  <input required placeholder="اسم الشخص..." value={userFormData.displayName} onChange={e => setUserFormData({...userFormData, displayName: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none" />
                 </div>
               </div>
 
-              {/* معلومات الاتصال */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">رقم الجوال (واتساب) *</label>
-                  <input 
-                    required 
-                    placeholder="9665..." 
-                    value={userFormData.phone} 
-                    onChange={e => setUserFormData({...userFormData, phone: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-green-500 transition-colors"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">رقم الجوال (واتساب)</label>
+                  <input required placeholder="9665..." value={userFormData.phone} onChange={e => setUserFormData({...userFormData, phone: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none" />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">البريد الإلكتروني *</label>
-                  <input 
-                    required 
-                    type="email" 
-                    placeholder="example@..." 
-                    value={userFormData.email} 
-                    onChange={e => setUserFormData({...userFormData, email: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-green-500 transition-colors"
-                  />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">البريد الإلكتروني</label>
+                  <input required type="email" placeholder="example@..." value={userFormData.email} onChange={e => setUserFormData({...userFormData, email: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none" />
                 </div>
               </div>
 
-              {/* بيانات الدخول */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">اسم المستخدم *</label>
-                  <input 
-                    required 
-                    placeholder="username..." 
-                    value={userFormData.username} 
-                    onChange={e => setUserFormData({...userFormData, username: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm outline-none focus:border-green-500 transition-colors"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">اسم المستخدم</label>
+                  <input required placeholder="username..." value={userFormData.username} onChange={e => setUserFormData({...userFormData, username: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none" />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">كلمة المرور *</label>
-                  <input 
-                    required 
-                    type="text" 
-                    placeholder="password..." 
-                    value={userFormData.password} 
-                    onChange={e => setUserFormData({...userFormData, password: e.target.value})} 
-                    className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm font-bold outline-none focus:border-green-500 transition-colors"
-                  />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase mr-1">كلمة المرور</label>
+                  <input required type="text" placeholder="password..." value={userFormData.password} onChange={e => setUserFormData({...userFormData, password: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-black outline-none" />
                 </div>
               </div>
 
-              {/* حالة الحساب */}
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-3">حالة الحساب</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
+              <div className="space-y-1 pt-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase mr-1 mb-2 block">حالة الحساب</label>
+                <div className="flex bg-gray-50 p-2 rounded-2xl border gap-2">
+                   <button 
                     type="button"
                     onClick={() => setUserFormData({...userFormData, status: 'active'})}
-                    className={`py-4 rounded-xl text-sm font-bold transition-all ${
-                      userFormData.status === 'active' 
-                        ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg' 
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                    }`}
-                  >
-                    ✅ نشط
-                  </button>
-                  <button 
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-black transition-all ${userFormData.status === 'active' ? 'bg-emerald-500 text-white shadow-lg' : 'text-gray-400'}`}
+                   >نشط ✅</button>
+                   <button 
                     type="button"
                     onClick={() => setUserFormData({...userFormData, status: 'suspended'})}
-                    className={`py-4 rounded-xl text-sm font-bold transition-all ${
-                      userFormData.status === 'suspended' 
-                        ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg' 
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                    }`}
-                  >
-                    🚫 معطل
-                  </button>
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-black transition-all ${userFormData.status === 'suspended' ? 'bg-rose-50 text-white shadow-lg' : 'text-gray-400'}`}
+                   >معطل 🚫</button>
                 </div>
               </div>
 
-              {/* زر الإرسال */}
-              <button 
-                type="submit" 
-                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all mt-4"
-              >
-                {editingUserId ? '💾 تحديث بيانات العميل' : '👤 تأكيد إضافة العميل'}
+              <button type="submit" className="w-full bg-navy text-mint py-5 rounded-[2rem] font-black text-sm shadow-xl active:scale-95 transition-all mt-4">
+                {editingUserId ? 'تحديث بيانات العميل ✅' : 'تأكيد إضافة العميل ✅'}
               </button>
             </form>
           </div>
         </div>
       )}
 
+      {/* {isScannerOpen && (
+        <ScannerModal 
+          onScan={(barcode) => {
+            setSearchQuery(barcode);
+            setIsScannerOpen(false);
+          }}
+          onCapture={(base64) => {
+            setIsScannerOpen(false);
+          }}
+          onClose={() => setIsScannerOpen(false)}
+        />
+      )}
+*/}
+
       <style>{`
-        @keyframes slide-up {
-          from { transform: translateY(20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        @keyframes fade-in {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        .animate-slide-up { animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .animate-fadeIn { animation: fade-in 0.5s ease-out forwards; }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-        .line-clamp-1 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
-        .line-clamp-2 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-        .line-clamp-3 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-        @media print {
-          .no-print-bg { background: white !important; }
-          .hide-on-print { display: none !important; }
-        }
-      `}</style>
+  @keyframes slide-up {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+  
+  `}</style>
     </div>
   );
 };
 
 export default ESB2BSeller;
+
+

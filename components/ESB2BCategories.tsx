@@ -93,7 +93,7 @@ const ESB2BCategories: React.FC<ESB2BCategoriesProps> = ({ products, onSelectCat
                      {cat.brands.length > 0 ? (
                         cat.brands.map((brand, idx) => (
                           <div key={idx} className="w-12 h-12 rounded-2xl bg-white border-2 border-white shadow-lg p-2 flex items-center justify-center overflow-hidden transition-transform hover:z-10 hover:scale-110">
-                            <img src={brand} className="w-full h-full object-contain" alt="brand" />
+                            <img src={brand} className="w-full h-full object-cover" alt="brand" />
                           </div>
                         ))
                      ) : (
@@ -138,7 +138,7 @@ const ESB2BCategories: React.FC<ESB2BCategoriesProps> = ({ products, onSelectCat
               {allAvailableBrands.map((brand, idx) => (
                 <div key={idx} className="group cursor-pointer flex flex-col items-center gap-4 transition-all hover:scale-110">
                   <div className="w-24 h-24 bg-white/5 backdrop-blur-xl rounded-[2.5rem] p-5 flex items-center justify-center border border-white/10 group-hover:bg-white group-hover:shadow-[0_0_40px_rgba(255,255,255,0.2)] transition-all duration-500">
-                    <img src={brand} className="max-w-full max-h-full object-contain grayscale group-hover:grayscale-0 transition-all duration-700" alt="brand" />
+                    <img src={brand} className="max-w-full max-h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" alt="brand" />
                   </div>
                 </div>
               ))}
