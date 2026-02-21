@@ -1,4 +1,3 @@
-
 export interface PriceTier {
   minQuantity: number;
   price: number;
@@ -22,6 +21,7 @@ export interface Product {
   isActive?: boolean;
   isVisible?: boolean;
   supplier: string;
+  supplierId?: string; // 👈 إضافة: معرف المورد (للربط الدقيق)
   minOrderQuantity?: number;
   rating?: number;
   reviewsCount?: number;
@@ -67,7 +67,8 @@ export interface AppUser {
   phone?: string;
   location?: string;
   paymentTerms?: 'credit' | 'cash' | 'both';
-  linkedSupplierId?: string;
+  linkedSupplierId?: string; // 👈 للمشتري: معرف المورد المرتبط به
+  supplierName?: string; // 👈 اسم المورد المرتبط (للعرض)
 }
 
 export interface Order {
@@ -90,6 +91,7 @@ export interface Order {
     imageUrl?: string; 
     barcode?: string;
     supplier?: string;   // 👈 إضافة: لمعرفة مورد كل قطعة داخل الطلب
+    supplierId?: string; // 👈 إضافة: معرف المورد للربط الدقيق
   }[];
 
   paymentMethod?: string;

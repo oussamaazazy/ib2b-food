@@ -737,6 +737,7 @@ const categories = useMemo(() => {
       onPageChange={handlePageChange}
       showOffersOnly={showOffersOnly}
       onOffersToggle={handleOffersToggle}
+      currentUser={currentUser} // 👈 إضافة هذا السطر فقط
     />
   );
       case 'categories': 
@@ -858,31 +859,30 @@ const categories = useMemo(() => {
         }
         return (
   <ESB2BHome 
-    products={filteredProducts} 
-    searchQuery={searchQuery}
-    // أضفنا هذين السطرين لربط الأقسام (المفضلة وغيرها)
-    activeCat={activeCat} 
-    setActiveCat={setActiveCat}
-    categories={categories} // تأكد من تمرير التصنيفات أيضاً
-    onAddToCart={addToCart} 
-    onSelectProduct={navigateToProductDetail} 
-    favorites={favorites} 
-    toggleFavorite={(id) => {
-      setFavorites(prev => {
-        const isExist = prev.includes(id);
-        const updated = isExist 
-          ? prev.filter(i => i !== id) 
-          : [...prev, id];
-        
-        localStorage.setItem('user_favorites', JSON.stringify(updated));
-        return updated;
-      });
-    }} 
-    currentPage={currentPage}
-    onPageChange={handlePageChange}
-    showOffersOnly={showOffersOnly}
-    onOffersToggle={handleOffersToggle}
-  />
+  products={products} 
+  searchQuery={searchQuery}
+  activeCat={activeCat} 
+  setActiveCat={setActiveCat} 
+  categories={categories}
+  onAddToCart={addToCart} 
+  onSelectProduct={navigateToProductDetail}
+  favorites={favorites} 
+  toggleFavorite={(id) => {
+    const updated = favorites.includes(id) 
+      ? favorites.filter(i => i !== id) 
+      : [...favorites, id];
+    setFavorites(updated);
+    localStorage.setItem('user_favorites', JSON.stringify(updated));
+  }}
+  currentPage={currentPage}
+  onPageChange={handlePageChange}
+  showOffersOnly={showOffersOnly}
+  onOffersToggle={handleOffersToggle}
+  currentUser={currentUser ? {
+    ...currentUser,
+    supplierName: currentUser.company // 👈 تأكد من وجود supplierName
+  } : null}
+/>
 );
     }
   };
