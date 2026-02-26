@@ -3,11 +3,12 @@ import { db } from "../services/firebase";
 import { SUPPLIER_PHONE } from "../constants";
 
 import * as XLSX from 'xlsx';
-import React, { useState, useRef, useMemo } from 'react';
-import { Product, Order, AppUser, Notification } from '../types';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { Product, Order, AppUser, Notification, BaseProduct, SupplierProduct } from '../types';
 import { formatEnNumber, formatDate } from '../App';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MOCK_STATS, CUSTOMER_PHONE } from '../constants';
+import { dbService } from '../services/dbService';
 // import ScannerModal from './ScannerModal';
 
 interface ESB2BSellerProps {
@@ -30,8 +31,8 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
   products = [], orders = [], users = [], notifications = [], currentUser, 
   onUpdateProduct, onAddProduct, onUpdateOrderStatus, onAddUser, onUpdateUser, onDeleteUser, onLogout, lang = 'ar' 
 }) => {
-  // تحديث أنواع التبويبات لإضافة 'offers'
-  const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'orders' | 'customers' | 'offers'>('overview');
+  // تحديث أنواع التبويبات لإضافة 'offers' و 'baseProducts'
+  const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'orders' | 'customers' | 'offers' | 'baseProducts'>('overview');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [tempStock, setTempStock] = useState<string>('');
@@ -40,19 +41,62 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
   const [orderStatusFilter, setOrderStatusFilter] = useState<Order['status'] | 'all'>('all');
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<Order | null>(null);
   
+  // حالات جديدة للمنتجات الأساسية
+  const [baseProducts, setBaseProducts] = useState<BaseProduct[]>([]);
+  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
+  const [isBaseProductModalOpen, setIsBaseProductModalOpen] = useState(false);
+  const [isSupplierProductModalOpen, setIsSupplierProductModalOpen] = useState(false);
+  const [editingBaseProductId, setEditingBaseProductId] = useState<string | null>(null);
+  const [editingSupplierProductId, setEditingSupplierProductId] = useState<string | null>(null);
+  const [baseProductSearchQuery, setBaseProductSearchQuery] = useState('');
+  const [isUploadingBaseProducts, setIsUploadingBaseProducts] = useState(false);
+  
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
 
+  // نموذج المنتج القديم
   const initialProductForm: Omit<Product, 'id'> = {
     name: '', category: '', price: 0, stock: 0, description: '', 
     supplier: currentUser?.company || '', 
     imageUrl: '', isActive: true, barcode: '', expiryDate: '', 
     offer: { buyQty: 0, getQty: 0, type: 'buy_x_get_y' }, discount: 0,
   };
+  
+  // نموذج المنتج الأساسي (جديد)
+  const initialBaseProductForm: Omit<BaseProduct, 'id'> = {
+    name: '',
+    barcode: '',
+    category: '',
+    subCategory: '',
+    description: '',
+    images: [],
+    brandImage: '',
+    nutritionImage: '',
+    isActive: true
+  };
+
+  // نموذج علاقة المنتج بالمورد (جديد)
+  const initialSupplierProductForm: Omit<SupplierProduct, 'id'> = {
+    baseProductId: '',
+    supplierId: currentUser?.id || '',
+    supplierName: currentUser?.company || '',
+    price: 0,
+    stock: 0,
+    discount: 0,
+    offer: null,
+    minOrderQuantity: 1,
+    isActive: true,
+    sortOrder: 0,
+    expiryDate: '',
+    tiers: []
+  };
+
   const [selectedCustomerForOrders, setSelectedCustomerForOrders] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<any>(initialProductForm);
+  const [baseProductForm, setBaseProductForm] = useState(initialBaseProductForm);
+  const [supplierProductForm, setSupplierProductForm] = useState(initialSupplierProductForm);
 
   const initialUserForm: Omit<AppUser, 'id'> = {
     company: '', displayName: '', phone: '', email: '', username: '', password: '', role: 'buyer', status: 'active', logoUrl: ''
@@ -64,11 +108,32 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const brandFileInputRef = useRef<HTMLInputElement>(null);
   const modalFileInputRef = useRef<HTMLInputElement>(null);
+  const baseProductFileInputRef = useRef<HTMLInputElement>(null);
 
   const [imageChangeId, setImageChangeId] = useState<string | null>(null);
   const [activeBrandEditCat, setActiveBrandEditCat] = useState<string | null>(null);
 
-  // تعريف filteredProducts أولاً
+  // تحميل المنتجات الأساسية وعلاقات الموردين
+  useEffect(() => {
+    if (currentUser?.id) {
+      loadBaseProducts();
+      loadSupplierProducts();
+    }
+  }, [currentUser]);
+
+  const loadBaseProducts = async () => {
+    const data = await dbService.getAllBaseProducts();
+    setBaseProducts(data);
+  };
+
+  const loadSupplierProducts = async () => {
+    if (currentUser?.id) {
+      const data = await dbService.getSupplierProductsBySupplier(currentUser.id);
+      setSupplierProducts(data);
+    }
+  };
+
+  // تعريف filteredProducts أولاً (المنتجات القديمة)
   const filteredProducts = useMemo(() => {
     // 🛡️ عزل الموردين: عرض منتجات شركة المورد الحالي فقط
     let result = products.filter(p => p.supplier === currentUser?.company);
@@ -104,6 +169,34 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
     });
   }, [products, searchQuery, activeTab, currentUser]);
 
+  // المنتجات المرتبطة بهذا المورد من النظام الجديد
+  const mySupplierProducts = useMemo(() => {
+    return supplierProducts.filter(sp => sp.isActive !== false);
+  }, [supplierProducts]);
+
+  // المنتجات الأساسية المفلترة حسب البحث
+  const filteredBaseProducts = useMemo(() => {
+    let result = baseProducts;
+    
+    if (baseProductSearchQuery) {
+      const query = baseProductSearchQuery.toLowerCase();
+      result = result.filter(bp => 
+        bp.name?.toLowerCase().includes(query) ||
+        bp.barcode?.toLowerCase().includes(query) ||
+        bp.category?.toLowerCase().includes(query) ||
+        bp.description?.toLowerCase().includes(query)
+      );
+    }
+    
+    return result;
+  }, [baseProducts, baseProductSearchQuery]);
+
+  // المنتجات التي يمكن ربطها (غير مرتبطة بهذا المورد بعد)
+  const availableBaseProducts = useMemo(() => {
+    const linkedProductIds = new Set(supplierProducts.map(sp => sp.baseProductId));
+    return baseProducts.filter(bp => !linkedProductIds.has(bp.id) && bp.isActive !== false);
+  }, [baseProducts, supplierProducts]);
+
   // تعريف filteredCustomers ثانياً
   const filteredCustomers = useMemo(() => {
     return (users || []).filter(u => 
@@ -128,14 +221,15 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
       // التحقق من أن الطلب يحتوي على منتج واحد على الأقل من منتجات هذا المورد
       const hasSupplierProduct = o.items?.some(item => 
         supplierProductIds.includes(item.productId) || 
-        item.supplier === currentUser?.company
+        item.supplier === currentUser?.company ||
+        item.supplierId === currentUser?.id
       );
       
       return hasSupplierProduct && (orderStatusFilter === 'all' ? true : o.status === orderStatusFilter);
     });
   }, [orders, orderStatusFilter, products, currentUser]);
 
-  // تعريف categoriesGrid
+  // تعريف categoriesGrid (من المنتجات القديمة)
   const categoriesGrid = useMemo(() => {
     const catsMap: Record<string, string> = {};
     // تصفية منتجات المورد الحالي فقط
@@ -154,7 +248,7 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
     { label: 'إجمالي المبيعات', value: filteredOrders.reduce((acc, o) => acc + (o.total || 0), 0), unit: 'ج.م', icon: '💰', color: 'bg-blue-600' },
     { label: 'طلبات جديدة', value: filteredOrders.filter(o => o.status === 'pending').length, unit: 'طلب', icon: '🔔', color: 'bg-emerald-500' },
     { label: 'العملاء', value: filteredCustomers.length, unit: 'عميل', icon: '👥', color: 'bg-indigo-600' },
-    { label: 'الأصناف', value: products.filter(p => p.supplier === currentUser?.company).length, unit: 'صنف', icon: '📦', color: 'bg-slate-800' },
+    { label: 'الأصناف', value: products.filter(p => p.supplier === currentUser?.company).length + mySupplierProducts.length, unit: 'صنف', icon: '📦', color: 'bg-slate-800' },
   ];
 
   const handleToggleVisibility = (p: Product) => {
@@ -180,6 +274,66 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
     });
     setTempStock(p.stock.toString());
     setIsProductModalOpen(true);
+  };
+
+  // دوال جديدة للتعامل مع المنتجات الأساسية
+  const handleAddBaseProductClick = () => {
+    setEditingBaseProductId(null);
+    setBaseProductForm(initialBaseProductForm);
+    setIsBaseProductModalOpen(true);
+  };
+
+  const handleEditBaseProduct = (bp: BaseProduct) => {
+    setEditingBaseProductId(bp.id);
+    setBaseProductForm({
+      name: bp.name || '',
+      barcode: bp.barcode || '',
+      category: bp.category || '',
+      subCategory: bp.subCategory || '',
+      description: bp.description || '',
+      images: bp.images || [],
+      brandImage: bp.brandImage || '',
+      nutritionImage: bp.nutritionImage || '',
+      isActive: bp.isActive !== false
+    });
+    setIsBaseProductModalOpen(true);
+  };
+
+  const handleAddSupplierProductClick = (baseProduct?: BaseProduct) => {
+    setEditingSupplierProductId(null);
+    setSupplierProductForm({
+      ...initialSupplierProductForm,
+      baseProductId: baseProduct?.id || '',
+      supplierId: currentUser?.id || '',
+      supplierName: currentUser?.company || ''
+    });
+    setIsSupplierProductModalOpen(true);
+  };
+
+  const handleEditSupplierProduct = (sp: SupplierProduct) => {
+    setEditingSupplierProductId(sp.id);
+    setSupplierProductForm({
+      baseProductId: sp.baseProductId || '',
+      supplierId: sp.supplierId || '',
+      supplierName: sp.supplierName || '',
+      price: sp.price || 0,
+      stock: sp.stock || 0,
+      discount: sp.discount || 0,
+      offer: sp.offer || null,
+      minOrderQuantity: sp.minOrderQuantity || 1,
+      isActive: sp.isActive !== false,
+      sortOrder: sp.sortOrder || 0,
+      expiryDate: sp.expiryDate || '',
+      tiers: sp.tiers || []
+    });
+    setIsSupplierProductModalOpen(true);
+  };
+
+  const handleDeleteSupplierProduct = async (id: string) => {
+    if (window.confirm('هل أنت متأكد من حذف هذا المنتج من قائمتك؟')) {
+      await dbService.deleteSupplierProduct(id);
+      loadSupplierProducts();
+    }
   };
 
   const handleEditCustomer = (user: AppUser) => {
@@ -231,27 +385,54 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
     }
   };
 
-  // دالة handleSubmit المعدلة
+  // دالة handleSubmit المعدلة للمنتجات القديمة
   const handleProductSubmit = (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  const productData = {
-    ...productForm,
-    supplier: currentUser?.company,
-    supplierId: currentUser?.id, // 👈 إضافة معرف المورد
-    createdAt: new Date().toISOString(),
+    e.preventDefault();
+    
+    const productData = {
+      ...productForm,
+      supplier: currentUser?.company,
+      supplierId: currentUser?.id, // 👈 إضافة معرف المورد
+      createdAt: new Date().toISOString(),
+    };
+
+    if (editingId) {
+      onUpdateProduct(editingId, productData);
+    } else {
+      onAddProduct(productData);
+    }
+    
+    setIsProductModalOpen(false);
+    setEditingId(null);
+    setProductForm(initialProductForm);
   };
 
-  if (editingId) {
-    onUpdateProduct(editingId, productData);
-  } else {
-    onAddProduct(productData);
-  }
-  
-  setIsProductModalOpen(false);
-  setEditingId(null);
-  setProductForm(initialProductForm);
-};
+  // دوال جديدة لإرسال نماذج المنتجات الأساسية وعلاقات الموردين
+  const handleBaseProductSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (editingBaseProductId) {
+      await dbService.updateBaseProduct(editingBaseProductId, baseProductForm);
+    } else {
+      await dbService.addBaseProduct(baseProductForm);
+    }
+    
+    setIsBaseProductModalOpen(false);
+    loadBaseProducts();
+  };
+
+  const handleSupplierProductSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (editingSupplierProductId) {
+      await dbService.updateSupplierProduct(editingSupplierProductId, supplierProductForm);
+    } else {
+      await dbService.addSupplierProduct(supplierProductForm);
+    }
+    
+    setIsSupplierProductModalOpen(false);
+    loadSupplierProducts();
+  };
 
   const getCustomerStats = (user: AppUser) => {
     // الحصول على منتجات هذا المورد فقط
@@ -261,7 +442,11 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
     
     const customerOrders = orders.filter(o => 
       (o.customerName === user.company || o.customerName === user.displayName) &&
-      o.items?.some(item => supplierProductIds.includes(item.productId) || item.supplier === currentUser?.company)
+      o.items?.some(item => 
+        supplierProductIds.includes(item.productId) || 
+        item.supplier === currentUser?.company ||
+        item.supplierId === currentUser?.id
+      )
     );
     
     const totalSpent = customerOrders.reduce((sum, o) => sum + (o.total || 0), 0);
@@ -283,6 +468,7 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
     // تصفية items حسب منتجات المورد الحالي فقط
     const supplierItems = order.items.filter(item => 
       item.supplier === currentUser?.company || 
+      item.supplierId === currentUser?.id ||
       products.some(p => p.id === item.productId && p.supplier === currentUser?.company)
     );
     
@@ -412,6 +598,76 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
     reader.readAsBinaryString(file);
   };
 
+  // دالة جديدة لرفع المنتجات الأساسية عبر Excel
+  const handleBaseProductBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingBaseProducts(true);
+
+    const reader = new FileReader();
+    
+    reader.onload = async (evt) => {
+      const bstr = evt.target?.result;
+      if (!bstr) return;
+
+      try {
+        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        
+        const rawData = XLSX.utils.sheet_to_json(ws);
+
+        let addedCount = 0;
+        let skippedCount = 0;
+
+        for (const item of rawData as any[]) {
+          const barcode = String(item.barcode || '').trim();
+          
+          // التحقق من وجود المنتج مسبقاً
+          const existingProduct = await dbService.findBaseProductByBarcode(barcode);
+          
+          if (existingProduct) {
+            skippedCount++;
+            continue;
+          }
+
+          const baseProductData = {
+            name: item.name || '',
+            barcode: barcode,
+            category: item.category || 'عام',
+            subCategory: item.subCategory || '',
+            description: item.description || '',
+            images: item.imageUrl ? [item.imageUrl] : [],
+            brandImage: item.brandImage || '',
+            nutritionImage: item.nutritionImage || '',
+            isActive: true
+          };
+
+          if (!baseProductData.name || !baseProductData.barcode) {
+            skippedCount++;
+            continue;
+          }
+
+          await dbService.addBaseProduct(baseProductData);
+          addedCount++;
+        }
+        
+        alert(`✅ اكتمل الرفع بنجاح!\n- إضافات جديدة: ${addedCount}\n- تم تخطي (موجود مسبقاً): ${skippedCount}`);
+        e.target.value = '';
+        loadBaseProducts();
+
+      } catch (error) {
+        console.error("Base product bulk upload error:", error);
+        alert("❌ حدث خطأ في معالجة الملف.");
+      } finally {
+        setIsUploadingBaseProducts(false);
+      }
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
   const handleExportExcel = () => {
     try {
       // تصفية منتجات المورد الحالي فقط
@@ -532,20 +788,27 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
       </header>
 
       <div className="max-w-7xl mx-auto w-full px-6 -mt-10 relative z-20 pb-40">
-        <nav className="flex bg-white/80 backdrop-blur-md p-2 rounded-[2.5rem] shadow-2xl border border-white mb-12 overflow-x-auto scrollbar-hide">
+        {/* شريط التنقل الجديد - مطابق للصورة */}
+        <nav className="grid grid-cols-6 gap-1 bg-navy p-2 rounded-2xl shadow-2xl border border-white/20 mb-12">
           {[
-            { id: 'overview', label: '📊 الرئيسية' },
-            { id: 'inventory', label: '📦 المخزون' },
-            { id: 'offers', label: '🎁 العروض' },
-            { id: 'orders', label: '🧾 الطلبات' },
-            { id: 'customers', label: '🤝 العملاء' }
+            { id: 'overview', label: 'الرئيسية', icon: '📊' },
+            { id: 'orders', label: 'الطلبات', icon: '🧾' },
+            { id: 'offers', label: 'العروض', icon: '🎁' },
+            { id: 'customers', label: 'العملاء', icon: '👥' },
+            { id: 'inventory', label: 'المخزون', icon: '📦' },
+            { id: 'baseProducts', label: 'المنتجات الاساسية', icon: '🏭' }
           ].map(tab => (
             <button 
               key={tab.id} 
               onClick={() => setActiveTab(tab.id as any)} 
-              className={`flex-1 min-w-[140px] flex items-center justify-center gap-3 py-4 rounded-2xl font-black text-xs transition-all ${activeTab === tab.id ? 'bg-navy text-mint shadow-2xl scale-105' : 'text-gray-400 hover:bg-white/50'}`}
+              className={`flex flex-col items-center justify-center py-4 rounded-xl font-black text-xs transition-all ${
+                activeTab === tab.id 
+                  ? 'bg-mint text-navy shadow-lg scale-105' 
+                  : 'text-white/60 hover:bg-white/10 hover:text-white'
+              }`}
             >
-              {tab.label}
+              <span className="text-xl mb-1">{tab.icon}</span>
+              <span>{tab.label}</span>
             </button>
           ))}
         </nav>
@@ -583,6 +846,150 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
                  <p className="text-gray-400 text-xs font-bold mt-2 leading-relaxed px-4">أضف منتجات جديدة وحافظ على تحديث صور البراندات لزيادة ظهورك للمشترين.</p>
               </div>
             </div>
+
+            {/* إحصائيات المنتجات الأساسية */}
+            <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-white">
+              <h4 className="font-black text-navy mb-4">إحصائيات المنتجات الأساسية</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-[8px] text-gray-400">منتجات أساسية</p>
+                  <p className="text-lg font-black text-navy">{baseProducts.length}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] text-gray-400">مرتبطة بي</p>
+                  <p className="text-lg font-black text-emerald-600">{mySupplierProducts.length}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] text-gray-400">متاحة للربط</p>
+                  <p className="text-lg font-black text-purple-600">{availableBaseProducts.length}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] text-gray-400">منتجاتي القديمة</p>
+                  <p className="text-lg font-black text-amber-600">{products.filter(p => p.supplier === currentUser?.company).length}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* تبويب المنتجات الأساسية (جديد) */}
+        {activeTab === 'baseProducts' && (
+          <div className="space-y-8 animate-fadeIn">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-black text-navy">المنتجات الأساسية</h2>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => baseProductFileInputRef.current?.click()}
+                  disabled={isUploadingBaseProducts}
+                  className="bg-purple-600 text-white px-6 py-3 rounded-xl font-black text-sm shadow-lg hover:bg-purple-700 transition-all"
+                >
+                  {isUploadingBaseProducts ? '⏳ جاري الرفع...' : '📊 رفع Excel'}
+                </button>
+                <button
+                  onClick={handleAddBaseProductClick}
+                  className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-black text-sm shadow-lg hover:bg-emerald-700 transition-all"
+                >
+                  + إضافة منتج أساسي
+                </button>
+              </div>
+              <input 
+                type="file" 
+                ref={baseProductFileInputRef} 
+                className="hidden" 
+                accept=".xlsx, .xls" 
+                onChange={handleBaseProductBulkUpload} 
+              />
+            </div>
+
+            {/* شريط البحث */}
+            <div className="bg-white/60 backdrop-blur-xl p-4 rounded-[2rem] border border-gray-100">
+              <input 
+                type="text" 
+                placeholder="🔍 ابحث عن منتج أساسي بالاسم، الباركود، أو الفئة..." 
+                value={baseProductSearchQuery}
+                onChange={(e) => setBaseProductSearchQuery(e.target.value)}
+                className="w-full px-6 py-4 bg-white border-2 border-gray-100 focus:border-navy rounded-xl outline-none font-bold text-sm"
+              />
+            </div>
+
+            {/* جدول المنتجات الأساسية */}
+            <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right">
+                  <thead className="bg-navy text-white text-[10px]">
+                    <tr>
+                      <th className="p-4">المنتج</th>
+                      <th className="p-4">الباركود</th>
+                      <th className="p-4">الفئة</th>
+                      <th className="p-4">الوصف</th>
+                      <th className="p-4">حالتي</th>
+                      <th className="p-4 text-center">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y text-xs">
+                    {filteredBaseProducts.map(bp => {
+                      const myRelation = supplierProducts.find(sp => sp.baseProductId === bp.id);
+                      return (
+                        <tr key={bp.id} className="hover:bg-gray-50">
+                          <td className="p-4 font-bold">{bp.name}</td>
+                          <td className="p-4 font-mono text-gray-500">{bp.barcode}</td>
+                          <td className="p-4">{bp.category}</td>
+                          <td className="p-4 text-gray-500 max-w-[200px] truncate">{bp.description || '—'}</td>
+                          <td className="p-4">
+                            {myRelation ? (
+                              <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-full text-[8px] font-black">
+                                مرتبط بسعر {myRelation.price} ج.م
+                              </span>
+                            ) : (
+                              <span className="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[8px] font-black">
+                                غير مرتبط
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex justify-center gap-2">
+                              {!myRelation && (
+                                <button 
+                                  onClick={() => handleAddSupplierProductClick(bp)}
+                                  className="text-emerald-500 p-2 hover:bg-emerald-50 rounded-lg"
+                                  title="ربط المنتج"
+                                >
+                                  🔗
+                                </button>
+                              )}
+                              {myRelation && (
+                                <button 
+                                  onClick={() => handleEditSupplierProduct(myRelation)}
+                                  className="text-blue-500 p-2 hover:bg-blue-50 rounded-lg"
+                                  title="تعديل السعر والمخزون"
+                                >
+                                  ✏️
+                                </button>
+                              )}
+                              {myRelation && (
+                                <button 
+                                  onClick={() => handleDeleteSupplierProduct(myRelation.id)}
+                                  className="text-rose-500 p-2 hover:bg-rose-50 rounded-lg"
+                                  title="إلغاء الربط"
+                                >
+                                  🗑️
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {filteredBaseProducts.length === 0 && (
+              <div className="text-center py-12 bg-white rounded-[2rem] border">
+                <p className="text-gray-400 text-sm">لا توجد منتجات أساسية مطابقة للبحث</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -690,6 +1097,7 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-8 mt-8">
+              {/* عرض المنتجات القديمة */}
               {filteredProducts.map(p => {
                 const isHidden = p.isActive === false;
                 const isLowStock = (p.stock || 0) <= 5;
@@ -1651,6 +2059,7 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
         </div>
       )}
       
+      {/* مودال إضافة/تعديل العميل (موجود) */}
       {isCustomerModalOpen && (
         <div className="fixed inset-0 z-[100] bg-navy/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[95vh]">
@@ -1749,6 +2158,151 @@ const ESB2BSeller: React.FC<ESB2BSellerProps> = ({
 
               <button type="submit" className="w-full bg-navy text-mint py-5 rounded-[2rem] font-black text-sm shadow-xl active:scale-95 transition-all mt-4">
                 {editingUserId ? 'تحديث بيانات العميل ✅' : 'تأكيد إضافة العميل ✅'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* مودال جديد: إضافة/تعديل منتج أساسي */}
+      {isBaseProductModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-navy/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up">
+            <div className="p-8 border-b bg-gray-50 flex justify-between items-center">
+              <h3 className="text-xl font-black text-navy">{editingBaseProductId ? 'تعديل منتج أساسي' : 'إضافة منتج أساسي جديد'}</h3>
+              <button onClick={() => setIsBaseProductModalOpen(false)} className="text-gray-400 hover:text-navy text-xl">✕</button>
+            </div>
+            <form onSubmit={handleBaseProductSubmit} className="p-8 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase">اسم المنتج</label>
+                <input 
+                  required
+                  type="text"
+                  value={baseProductForm.name}
+                  onChange={e => setBaseProductForm({...baseProductForm, name: e.target.value})}
+                  className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">الباركود</label>
+                  <input 
+                    required
+                    type="text"
+                    value={baseProductForm.barcode}
+                    onChange={e => setBaseProductForm({...baseProductForm, barcode: e.target.value})}
+                    className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">الفئة</label>
+                  <input 
+                    required
+                    type="text"
+                    value={baseProductForm.category}
+                    onChange={e => setBaseProductForm({...baseProductForm, category: e.target.value})}
+                    className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase">الوصف</label>
+                <textarea 
+                  value={baseProductForm.description || ''}
+                  onChange={e => setBaseProductForm({...baseProductForm, description: e.target.value})}
+                  className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none h-24"
+                />
+              </div>
+
+              <button type="submit" className="w-full bg-navy text-mint py-5 rounded-[2rem] font-black text-sm shadow-xl">
+                {editingBaseProductId ? 'حفظ التعديلات' : 'إضافة المنتج الأساسي'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* مودال جديد: إضافة/تعديل علاقة منتج بمورد */}
+      {isSupplierProductModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-navy/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up">
+            <div className="p-8 border-b bg-gray-50 flex justify-between items-center">
+              <h3 className="text-xl font-black text-navy">{editingSupplierProductId ? 'تعديل المنتج' : 'ربط منتج أساسي'}</h3>
+              <button onClick={() => setIsSupplierProductModalOpen(false)} className="text-gray-400 hover:text-navy text-xl">✕</button>
+            </div>
+            <form onSubmit={handleSupplierProductSubmit} className="p-8 space-y-4">
+              {!editingSupplierProductId && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">المنتج الأساسي</label>
+                  <select
+                    required
+                    value={supplierProductForm.baseProductId}
+                    onChange={e => {
+                      const bp = baseProducts.find(b => b.id === e.target.value);
+                      setSupplierProductForm({
+                        ...supplierProductForm,
+                        baseProductId: e.target.value
+                      });
+                    }}
+                    className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-bold outline-none"
+                  >
+                    <option value="">اختر المنتج الأساسي</option>
+                    {availableBaseProducts.map(bp => (
+                      <option key={bp.id} value={bp.id}>{bp.name} - {bp.barcode}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">السعر (ج.م)</label>
+                  <input 
+                    required
+                    type="number"
+                    step="0.01"
+                    value={supplierProductForm.price}
+                    onChange={e => setSupplierProductForm({...supplierProductForm, price: Number(e.target.value)})}
+                    className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-black outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">المخزون</label>
+                  <input 
+                    required
+                    type="number"
+                    value={supplierProductForm.stock}
+                    onChange={e => setSupplierProductForm({...supplierProductForm, stock: Number(e.target.value)})}
+                    className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-black outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">الخصم %</label>
+                  <input 
+                    type="number"
+                    value={supplierProductForm.discount || 0}
+                    onChange={e => setSupplierProductForm({...supplierProductForm, discount: Number(e.target.value)})}
+                    className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-black outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">الحد الأدنى</label>
+                  <input 
+                    type="number"
+                    value={supplierProductForm.minOrderQuantity || 1}
+                    onChange={e => setSupplierProductForm({...supplierProductForm, minOrderQuantity: Number(e.target.value)})}
+                    className="w-full p-4 bg-gray-50 rounded-2xl border text-xs font-black outline-none"
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="w-full bg-navy text-mint py-5 rounded-[2rem] font-black text-sm shadow-xl">
+                {editingSupplierProductId ? 'حفظ التعديلات' : 'ربط المنتج'}
               </button>
             </form>
           </div>

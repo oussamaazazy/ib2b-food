@@ -101,7 +101,7 @@ export const ESLogo: React.FC<{ light?: boolean; size?: 'sm' | 'md' | 'lg' | 'xl
   const sizeClasses = { sm: 'text-2xl', md: 'text-3xl', lg: 'text-5xl', xl: 'text-8xl' };
   return (
     <div className={`logo-font inline-flex items-center ${sizeClasses[size]} select-none cursor-pointer`} style={{ direction: 'ltr' }}>
-      <span className={light ? 'text-white' : 'text-navy'}>E</span><span className="text-mint">S</span>
+      <span className={light ? 'text-white' : 'text-navy'}>i</span><span className="text-mint">B2B</span>
     </div>
   );
 };
@@ -485,9 +485,19 @@ const toggleFavorite = useCallback((productId: string) => {
 const categories = useMemo(() => {
   const catsMap: Record<string, string> = {};
   
-  products.forEach(p => {
+  // 1. تحديد المنتجات التي تخص مورد المشتري فقط
+  const relevantProducts = products.filter(p => {
+    // إذا كان المستخدم مشتري، نعرض فقط منتجات مورده
+    if (userRole === 'buyer' && currentUser?.company) {
+      return p.supplierName === currentUser.company;
+    }
+    // إذا كان أدمن أو مورد، نعرض الكل (أو يمكنك تخصيصها للمورد أيضاً)
+    return true; 
+  });
+
+  // 2. استخراج الفئات من هذه المنتجات المفلترة فقط
+  relevantProducts.forEach(p => {
     if (p.category && !catsMap[p.category]) {
-      // يأخذ صورة البراند أو الصورة الأساسية للمنتج لتكون شعار الفئة
       catsMap[p.category] = p.brandImage || p.image || p.imageUrl || '';
     }
   });
@@ -501,9 +511,8 @@ const categories = useMemo(() => {
     { name: 'الكل', icon: '🛍️' },
     { name: 'المفضلة', icon: '❤️' },
     ...dynamicCats
-    
   ];
-}, [products]);
+}, [products, currentUser, userRole]); // إضافة التبعيات لضمان التحديث عند تغيير المستخدم
 
   const [cart, setCart] = useState<any[]>(() => {
     try {

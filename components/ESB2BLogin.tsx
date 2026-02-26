@@ -107,7 +107,7 @@ const ESB2BLogin: React.FC<ESB2BLoginProps> = ({ users = [], onLogin, onBack, la
         <div className="p-8 md:p-12 space-y-6">
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-black text-navy">تسجيل الدخول</h2>
-            <p className="text-gray-400 text-xs font-bold">أدخل بيانات الحساب للوصول إلى المنصة</p>
+            <p className="text-gray-400 text-xs font-bold">مرحبا بكم</p>
           </div>
           
           {error && (

@@ -3,6 +3,48 @@ export interface PriceTier {
   price: number;
 }
 
+// =============== هياكل البيانات الجديدة للمنتجات المركزية ===============
+// المنتج الأساسي (بيانات ثابتة)
+export interface BaseProduct {
+  id: string;
+  name: string;
+  barcode: string; // الباركود موحد لجميع الموردين
+  category: string;
+  subCategory?: string;
+  description: string;
+  images?: string[];
+  brandImage?: string;
+  nutritionImage?: string;
+  isActive?: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+// علاقة المنتج بالمورد (أسعار ومخزون خاصة بكل مورد)
+export interface SupplierProduct {
+  id: string; // معرف فريد للعلاقة
+  baseProductId: string; // رابط للمنتج الأساسي
+  supplierId: string; // رابط للمورد
+  supplierName: string; // اسم المورد (للسهولة)
+  price: number;
+  stock: number;
+  discount?: number;
+  offer?: {
+    type: 'buy_x_get_y' | 'bulk_discount';
+    buyQty: number;
+    getQty: number;
+  } | null;
+  minOrderQuantity?: number;
+  isActive?: boolean;
+  sortOrder?: number;
+  expiryDate?: string;
+  tiers?: PriceTier[]; // التسعير المتدرج (كميات أكبر بأسعار أقل)
+  createdAt?: any;
+  updatedAt?: any;
+}
+// =========================================================================
+
+// المنتج الحالي - سيبقى للتوافق مع الكود القديم
 export interface Product {
   id: string;
   name: string;
@@ -21,7 +63,7 @@ export interface Product {
   isActive?: boolean;
   isVisible?: boolean;
   supplier: string;
-  supplierId?: string; // 👈 إضافة: معرف المورد (للربط الدقيق)
+  supplierId?: string; // معرف المورد (للربط الدقيق)
   minOrderQuantity?: number;
   rating?: number;
   reviewsCount?: number;
@@ -36,9 +78,11 @@ export interface Product {
   } | null;
   variants?: any[];
   reviews?: any[];
-  sortOrder?: number; // 👈 أضف هذا السطر هنا
+  sortOrder?: number;
   discount?: number;
-
+  
+  // حقول إضافية للتوافق مع النظام الجديد (اختياري)
+  baseProductId?: string; // إذا كان المنتج محولاً للنظام الجديد
 }
 
 export interface BusinessStat {
@@ -67,38 +111,42 @@ export interface AppUser {
   phone?: string;
   location?: string;
   paymentTerms?: 'credit' | 'cash' | 'both';
-  linkedSupplierId?: string; // 👈 للمشتري: معرف المورد المرتبط به
-  supplierName?: string; // 👈 اسم المورد المرتبط (للعرض)
+  linkedSupplierId?: string; // للمشتري: معرف المورد المرتبط به
+  supplierName?: string; // اسم المورد المرتبط (للعرض)
 }
 
 export interface Order {
   id: string;
   customerName: string;
-  customerId: string; // 👈 إضافة مهمة: لربط الطلب بحساب المستخدم بدقة حتى لو تغير اسمه
+  customerId: string; // لربط الطلب بحساب المستخدم بدقة حتى لو تغير اسمه
   date: string;
   timestamp?: any; // يفضل أن يكون من نوع Timestamp الخاص بـ Firebase
   total: number;
-  subtotal: number; // 👈 إضافة: الإجمالي قبل الضريبة
-  tax: number;      // 👈 إضافة: قيمة الضريبة (15%) بشكل منفصل للشفافية
+  subtotal: number; // الإجمالي قبل الضريبة
+  tax: number;      // قيمة الضريبة (15%) بشكل منفصل للشفافية
   status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
   
   // تحديث محتوى العناصر (items)
   items: { 
-    productId: string;   // 👈 إضافة: مهمة جداً للرجوع لبيانات المنتج الأصلي
+    productId: string;   // مهمة جداً للرجوع لبيانات المنتج الأصلي
     productName: string; 
     quantity: number; 
     price: number;       // السعر وقت الشراء (لحمايته من تغييرات الأسعار لاحقاً)
     imageUrl?: string; 
     barcode?: string;
-    supplier?: string;   // 👈 إضافة: لمعرفة مورد كل قطعة داخل الطلب
-    supplierId?: string; // 👈 إضافة: معرف المورد للربط الدقيق
+    supplier?: string;   // لمعرفة مورد كل قطعة داخل الطلب
+    supplierId?: string; // معرف المورد للربط الدقيق
+    
+    // حقول إضافية للنظام الجديد
+    baseProductId?: string; // المنتج الأساسي (إذا كان محولاً)
+    supplierProductId?: string; // معرف علاقة المنتج بالمورد
   }[];
 
   paymentMethod?: string;
   shippingAddress?: string;
-  customerPhone?: string; // 👈 إضافة: لسهولة تواصل المندوب مع العميل
+  customerPhone?: string; // لسهولة تواصل المندوب مع العميل
   notes?: string;
-  deliveryFee?: number;   // 👈 إضافة: إذا كان هناك رسوم توصيل
+  deliveryFee?: number;   // إذا كان هناك رسوم توصيل
 }
 
 export interface Notification {

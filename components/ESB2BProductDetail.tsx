@@ -83,6 +83,8 @@ const ESB2BProductDetail: React.FC<ESB2BProductDetailProps> = ({
   const [activeImg, setActiveImg] = useState('');
   const [isZoomed, setIsZoomed] = useState(false);
   const [showAllSimilar, setShowAllSimilar] = useState(false); // لعرض كل المنتجات المشابهة
+  const [supplierInfo, setSupplierInfo] = useState<{ name: string; phone?: string } | null>(null);
+  
   const isOutOfStock = (product.stock || 0) <= 0;
 
   useEffect(() => {
@@ -90,6 +92,14 @@ const ESB2BProductDetail: React.FC<ESB2BProductDetailProps> = ({
     setQuantity(product.minOrderQuantity || 1);
     const initialImg = product.imageUrl || (product.images && product.images.length > 0 ? product.images[0] : 'https://via.placeholder.com/600?text=No+Image');
     setActiveImg(initialImg);
+    
+    // محاولة الحصول على معلومات المورد (يمكن توسيعها لاحقاً)
+    if (product.supplier) {
+      setSupplierInfo({
+        name: product.supplier,
+        phone: SUPPLIER_PHONE // استخدام الرقم الافتراضي
+      });
+    }
   }, [product]);
 
   const calculateTotal = useCallback(() => {
@@ -123,10 +133,13 @@ const ESB2BProductDetail: React.FC<ESB2BProductDetailProps> = ({
     const total = calculateTotal();
     const savings = calculateSavings();
     const message = `مرحباً، أود الاستفسار عن المنتج: ${product.name}
+المورد: ${product.supplier || 'غير محدد'}
 السعر: ${product.price} ج.م
 الكمية المطلوبة: ${quantity}
 الإجمالي: ${total} ج.م
 ${savings > 0 ? `التوفير: ${savings} ج.م` : ''}
+الباركود: ${product.barcode || 'غير محدد'}
+الفئة: ${product.category}
 الحالة: ${isOutOfStock ? 'نفذ المخزون' : 'متوفر'}`;
     
     const url = `https://wa.me/${SUPPLIER_PHONE.replace('+', '')}?text=${encodeURIComponent(message)}`;
@@ -179,65 +192,65 @@ ${savings > 0 ? `التوفير: ${savings} ج.م` : ''}
         </div>
 
         <div className="flex flex-col lg:flex-row gap-10 px-4">
-          {/* قسم الصور - بدون sticky */}
-<div className="flex-1 bg-white p-6 rounded-[3rem] shadow-sm border border-gray-100">
-  <div 
-    className={`relative aspect-square rounded-[2rem] overflow-hidden bg-gray-50 group mb-6 cursor-zoom-in transition-all duration-300 ${
-      isZoomed ? 'scale-150 z-50 fixed inset-0 bg-black/90 flex items-center justify-center' : ''
-    }`}
-    onClick={() => setIsZoomed(!isZoomed)}
-  >
-    {/* محتوى الصورة كما هو */}
-    {product.offer && product.offer.buyQty > 0 && !isOutOfStock && (
-      <div className="absolute top-4 right-4 z-10 drop-shadow-xl animate-pulse">
-        <div className="bg-white/70 backdrop-blur-md text-rose-600 text-[10px] font-black px-4 py-2 rounded-2xl border border-white shadow-sm flex items-center gap-2">
-          <span className="bg-rose-500 text-white w-5 h-5 flex items-center justify-center rounded-lg text-[10px]">🎁</span>
-          <span className="tracking-tight">اشتري {product.offer.buyQty} واحصل على {product.offer.getQty} مجاناً</span>
-        </div>
-      </div>
-    )}
+          {/* قسم الصور */}
+          <div className="flex-1 bg-white p-6 rounded-[3rem] shadow-sm border border-gray-100">
+            <div 
+              className={`relative aspect-square rounded-[2rem] overflow-hidden bg-gray-50 group mb-6 cursor-zoom-in transition-all duration-300 ${
+                isZoomed ? 'scale-150 z-50 fixed inset-0 bg-black/90 flex items-center justify-center' : ''
+              }`}
+              onClick={() => setIsZoomed(!isZoomed)}
+            >
+              {/* شارة العرض */}
+              {product.offer && product.offer.buyQty > 0 && !isOutOfStock && (
+                <div className="absolute top-4 right-4 z-10 drop-shadow-xl animate-pulse">
+                  <div className="bg-white/70 backdrop-blur-md text-rose-600 text-[10px] font-black px-4 py-2 rounded-2xl border border-white shadow-sm flex items-center gap-2">
+                    <span className="bg-rose-500 text-white w-5 h-5 flex items-center justify-center rounded-lg text-[10px]">🎁</span>
+                    <span className="tracking-tight">اشتري {product.offer.buyQty} واحصل على {product.offer.getQty} مجاناً</span>
+                  </div>
+                </div>
+              )}
 
-    <img 
-      src={activeImg} 
-      className={`w-full h-full object-contain transition-transform duration-700 ${
-        isZoomed ? 'scale-150' : 'group-hover:scale-110'
-      } ${isOutOfStock ? 'grayscale opacity-40' : ''}`} 
-      alt={product.name} 
-      onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/600?text=Image+Error'; }}
-    />
+              <img 
+                src={activeImg} 
+                className={`w-full h-full object-contain transition-transform duration-700 ${
+                  isZoomed ? 'scale-150' : 'group-hover:scale-110'
+                } ${isOutOfStock ? 'grayscale opacity-40' : ''}`} 
+                alt={product.name} 
+                onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/600?text=Image+Error'; }}
+              />
 
-    {isOutOfStock && (
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <span className="bg-rose-600 text-white font-black px-10 py-4 rounded-3xl shadow-2xl text-xl rotate-12">نفذ المخزون 🚫</span>
-      </div>
-    )}
-    
-    {product.isBestSeller && !isOutOfStock && (
-      <span className="absolute top-6 right-6 bg-orange-500 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-2xl">الأكثر مبيعاً 🔥</span>
-    )}
+              {isOutOfStock && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <span className="bg-rose-600 text-white font-black px-10 py-4 rounded-3xl shadow-2xl text-xl rotate-12">نفذ المخزون 🚫</span>
+                </div>
+              )}
+              
+              {product.isBestSeller && !isOutOfStock && (
+                <span className="absolute top-6 right-6 bg-orange-500 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-2xl">الأكثر مبيعاً 🔥</span>
+              )}
 
-    {/* مؤشر التكبير */}
-    <div className="absolute bottom-4 left-4 bg-black/50 text-white text-[10px] px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-      {isZoomed ? 'اضغط للتصغير' : 'اضغط للتكبير'}
-    </div>
-  </div>
-  
-  {allImages.length > 1 && (
-    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-      {allImages.map((img, i) => (
-        <button 
-          key={i} 
-          onClick={() => setActiveImg(img || '')}
-          className={`w-20 h-20 rounded-2xl border-4 transition-all overflow-hidden flex-shrink-0 ${
-            activeImg === img ? 'border-[#feee00] scale-105 shadow-md' : 'border-gray-50 opacity-60 hover:opacity-100'
-          }`}
-        >
-          <img src={img || ''} className="w-full h-full object-cover" alt="" />
-        </button>
-      ))}
-    </div>
-  )}
-</div>
+              {/* مؤشر التكبير */}
+              <div className="absolute bottom-4 left-4 bg-black/50 text-white text-[10px] px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                {isZoomed ? 'اضغط للتصغير' : 'اضغط للتكبير'}
+              </div>
+            </div>
+            
+            {allImages.length > 1 && (
+              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                {allImages.map((img, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => setActiveImg(img || '')}
+                    className={`w-20 h-20 rounded-2xl border-4 transition-all overflow-hidden flex-shrink-0 ${
+                      activeImg === img ? 'border-[#feee00] scale-105 shadow-md' : 'border-gray-50 opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={img || ''} className="w-full h-full object-cover" alt="" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* معلومات المنتج */}
           <div className="flex-[1.3] space-y-8">
@@ -258,7 +271,7 @@ ${savings > 0 ? `التوفير: ${savings} ج.م` : ''}
                     </button>
                   </div>
                   
-                  {/* رمز المشاركة (جديد) */}
+                  {/* رمز المشاركة */}
                   <button 
                     onClick={() => {
                       navigator.share?.({
@@ -280,19 +293,24 @@ ${savings > 0 ? `التوفير: ${savings} ج.م` : ''}
                   {product.name}
                 </h1>
                 
-                <div className="flex items-center gap-2 text-xs font-bold text-orange-600 bg-orange-50 px-4 py-2 rounded-xl w-fit">
-                  <span>📅 تاريخ الانتهاء:</span>
-                  <span>{formatDate(product.expiryDate) || 'غير محدد'}</span>
-                </div>
+                {product.expiryDate && (
+                  <div className="flex items-center gap-2 text-xs font-bold text-orange-600 bg-orange-50 px-4 py-2 rounded-xl w-fit">
+                    <span>📅 تاريخ الانتهاء:</span>
+                    <span>{formatDate(product.expiryDate)}</span>
+                  </div>
+                )}
 
                 <p className="text-slate-500 text-sm font-medium leading-relaxed">{product.description}</p>
                 
-                {/* معلومات إضافية (جديد) */}
+                {/* معلومات إضافية محسنة */}
                 <div className="grid grid-cols-2 gap-3 mt-4">
                   {product.supplier && (
                     <div className="bg-gray-50 p-3 rounded-xl">
                       <span className="text-[8px] text-gray-400 block">المورد</span>
                       <span className="text-xs font-bold">{product.supplier}</span>
+                      {product.supplierId && (
+                        <span className="text-[6px] text-gray-300 block mt-1">ID: {product.supplierId.slice(-6)}</span>
+                      )}
                     </div>
                   )}
                   {product.barcode && (
@@ -302,6 +320,21 @@ ${savings > 0 ? `التوفير: ${savings} ج.م` : ''}
                     </div>
                   )}
                 </div>
+
+                {/* معلومات إضافية عن التسعير المتدرج إذا وجد */}
+                {product.tiers && product.tiers.length > 0 && (
+                  <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                    <h4 className="text-[10px] font-black text-purple-600 mb-2">💰 تسعير الكميات</h4>
+                    <div className="space-y-1">
+                      {product.tiers.map((tier, idx) => (
+                        <div key={idx} className="flex justify-between text-xs">
+                          <span className="text-gray-600">{tier.minQuantity}+ قطعة</span>
+                          <span className="font-black text-purple-600">{tier.price} ج.م</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="bg-slate-50 rounded-[2rem] p-6 border border-slate-100">
@@ -311,12 +344,22 @@ ${savings > 0 ? `التوفير: ${savings} ج.م` : ''}
                     <p className={`text-3xl font-black ${isOutOfStock ? 'text-gray-400' : 'text-slate-900'}`}>
                       {product.price.toLocaleString()} <span className="text-xs">ج.م</span>
                     </p>
+                    {product.discount && product.discount > 0 && (
+                      <p className="text-[10px] text-rose-500 font-black mt-1">
+                        خصم {product.discount}%
+                      </p>
+                    )}
                   </div>
                   <div className="text-left">
                     <p className="text-[10px] text-gray-400 font-black uppercase mb-1">حالة المخزون</p>
                     <p className={`text-sm font-black ${!isOutOfStock ? 'text-green-600' : 'text-red-500'}`}>
                       {!isOutOfStock ? 'متوفر' : 'نفذ تماماً ❌'}
                     </p>
+                    {product.stock > 0 && product.stock <= 10 && (
+                      <p className="text-[8px] text-orange-500 font-black mt-1">
+                        🚨 متبقي {product.stock} قطعة فقط
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -337,45 +380,34 @@ ${savings > 0 ? `التوفير: ${savings} ج.م` : ''}
                       onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                       className="w-16 h-10 text-center font-bold outline-none"
                       min="1"
+                      max={product.stock}
                       disabled={isOutOfStock}
                     />
                     <button 
                       onClick={() => handleQuantityChange(quantity + 1)}
-                      disabled={isOutOfStock}
+                      disabled={isOutOfStock || quantity >= product.stock}
                       className="w-10 h-10 flex items-center justify-center bg-gray-50 text-navy font-bold hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       +
                     </button>
                   </div>
-                </div>
-              </div>
-
-              {/* ملخص الطلب 
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6">
-                <h3 className="text-sm font-black mb-4">ملخص الطلب</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">سعر الوحدة:</span>
-                    <span className="font-bold">{product.price.toLocaleString()} ج.م</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">الكمية:</span>
-                    <span className="font-bold">{quantity}</span>
-                  </div>
-                  {calculateSavings() > 0 && (
-                    <div className="flex justify-between text-sm text-green-600">
-                      <span>توفير من العرض:</span>
-                      <span className="font-bold">{calculateSavings().toLocaleString()} ج.م</span>
-                    </div>
+                  {product.minOrderQuantity && product.minOrderQuantity > 1 && (
+                    <span className="text-[8px] text-gray-400">
+                      الحد الأدنى: {product.minOrderQuantity}
+                    </span>
                   )}
-                  <div className="border-t border-blue-200 my-2 pt-2">
-                    <div className="flex justify-between font-black text-lg">
-                      <span>الإجمالي:</span>
-                      <span className="text-blue-600">{calculateTotal().toLocaleString()} ج.م</span>
+                </div>
+
+                {/* ملخص التوفير */}
+                {calculateSavings() > 0 && (
+                  <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black text-emerald-600">توفير من العرض:</span>
+                      <span className="text-sm font-black text-emerald-600">{formatEnNumber(calculateSavings())} ج.م</span>
                     </div>
                   </div>
-                </div>
-              </div> */}
+                )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <button 
@@ -399,11 +431,19 @@ ${savings > 0 ? `التوفير: ${savings} ج.م` : ''}
                   <span className="text-xl text-green-600">💬</span>
                 </button>
               </div>
+
+              {/* ضمان الجودة */}
+              {product.isVerified && (
+                <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 p-3 rounded-xl">
+                  <span>✅</span>
+                  <span className="text-[10px] font-black">منتج موثق من قبل iB2B</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* قسم المنتجات المشابهة (جديد) */}
+        {/* قسم المنتجات المشابهة */}
         {filteredSimilarProducts.length > 0 && (
           <div className="mt-16 px-4">
             <div className="flex items-center justify-between mb-6">
@@ -475,7 +515,7 @@ ${savings > 0 ? `التوفير: ${savings} ج.م` : ''}
           </div>
         )}
 
-        {/* قسم اقتراحات إضافية (يمكن إضافته لاحقاً) */}
+        {/* قسم اقتراحات إضافية */}
         {filteredSimilarProducts.length === 0 && (
           <div className="mt-16 px-4 text-center py-10 bg-white/50 rounded-[2rem]">
             <span className="text-4xl mb-4 block">🛍️</span>
